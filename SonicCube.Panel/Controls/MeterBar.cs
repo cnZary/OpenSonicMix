@@ -172,8 +172,8 @@ public sealed class MeterBar : FrameworkElement
 
     private void DrawBar(DrawingContext dc, Rect r, double level, double peak)
     {
-        // 背景
-        dc.DrawRectangle((Brush)FindResource("BrushPanelDeep"), null, r);
+        // 背景(深色轨道 + 细边框,空电平时也清晰可见)
+        dc.DrawRectangle((Brush)FindResource("BrushMeterTrack"), new Pen((Brush)FindResource("BrushBorder"), 1), r);
         var redBrush = new SolidColorBrush((Color)FindResource("ColorMeterRed"));
         var yellowBrush = new SolidColorBrush((Color)FindResource("ColorMeterYellow"));
         var green = (Brush)FindResource("BrushOn");

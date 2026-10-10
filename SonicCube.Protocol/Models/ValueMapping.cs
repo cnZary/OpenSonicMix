@@ -17,8 +17,13 @@ public static class ValueMapping
     /// <summary>UI 等距位置 → 协议 dB(分段线性插值)。</summary>
     public static double FaderPositionToDb(double position) => MapPiecewise(FaderY, FaderX, position);
 
-    /// <summary>推子显示文本:小于 -50.18 dB 显示 "-∞",否则四舍五入到整数 dB。</summary>
-    public static string FaderText(double db) => db < -50.18 ? "-∞" : Math.Round(db).ToString("0");
+    /// <summary>推子显示文本:小于 -50.18 dB 显示 "-∞",否则四舍五入到整数 dB(避免 "-0")。</summary>
+    public static string FaderText(double db)
+    {
+        if (db < -50.18) return "-∞";
+        int v = (int)Math.Round(db);
+        return v == 0 ? "0" : v.ToString("0");
+    }
 
     // ── SEND 发送量 ──────────────────────────────────────────
     /// <summary>SEND 协议值 = UI 值 / 100(UI 0~100 → 协议 0.0~1.0)。</summary>

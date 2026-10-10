@@ -31,6 +31,9 @@
   <Color x:Key="ColorWarn">#FFE5B15C</Color>
   <Color x:Key="ColorError">#FFE05C5C</Color>
 
+  <!-- 电平表槽背景(与面板底色区分,空电平也可见) -->
+  <Color x:Key="ColorMeterTrack">#FF17171A</Color>
+
   <!-- 电平表 -->
   <Color x:Key="ColorMeterGreen">#FF3FBF6A</Color>
   <Color x:Key="ColorMeterYellow">#FFDFC33C</Color>
@@ -54,6 +57,7 @@
   <SolidColorBrush x:Key="BrushOff" Color="{StaticResource ColorOff}"/>
   <SolidColorBrush x:Key="BrushWarn" Color="{StaticResource ColorWarn}"/>
   <SolidColorBrush x:Key="BrushError" Color="{StaticResource ColorError}"/>
+  <SolidColorBrush x:Key="BrushMeterTrack" Color="{StaticResource ColorMeterTrack}"/>
 
   <!-- 尺寸 / 圆角 / 间距 -->
   <sys:Double x:Key="RadiusSmall">3</sys:Double>
