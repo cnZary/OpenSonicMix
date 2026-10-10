@@ -209,7 +209,7 @@
     <Setter Property="Template">
       <Setter.Value>
         <ControlTemplate TargetType="ComboBox">
-          <Grid>
+          <Grid x:Name="root" Background="Transparent">
             <Border x:Name="b" Background="{TemplateBinding Background}"
                     BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="4"/>
             <Grid Margin="1">
@@ -218,24 +218,22 @@
                 <ColumnDefinition Width="24"/>
               </Grid.ColumnDefinitions>
               <ContentPresenter Grid.Column="0" Margin="8,0,0,0" VerticalAlignment="Center"
+                                HorizontalAlignment="Left"
                                 Content="{TemplateBinding SelectionBoxItem}"/>
-              <ToggleButton Grid.Column="1" IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
-                            Background="Transparent" BorderThickness="0" ClickMode="Press">
-                <Path Data="M0,0 L8,0 L4,5 Z" Fill="{StaticResource BrushTextSecondary}"
-                      HorizontalAlignment="Center" VerticalAlignment="Center"/>
-              </ToggleButton>
-              <Popup x:Name="pop" Grid.ColumnSpan="2" IsOpen="{TemplateBinding IsDropDownOpen}"
-                     Placement="Bottom" AllowsTransparency="True" Focusable="False"
-                     PopupAnimation="Slide">
-                <Border Background="{StaticResource BrushPanelAlt}" BorderBrush="{StaticResource BrushBorderLight}"
-                        BorderThickness="1" CornerRadius="4" Padding="2"
-                        MinWidth="{TemplateBinding ActualWidth}" MaxHeight="320">
-                  <ScrollViewer>
-                    <ItemsPresenter/>
-                  </ScrollViewer>
-                </Border>
-              </Popup>
+              <Path Grid.Column="1" Data="M0,0 L8,0 L4,5 Z" Fill="{StaticResource BrushTextSecondary}"
+                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Grid>
+            <Popup x:Name="pop" IsOpen="{TemplateBinding IsDropDownOpen}"
+                   Placement="Bottom" AllowsTransparency="True" Focusable="False"
+                   PopupAnimation="Slide">
+              <Border Background="{StaticResource BrushPanelAlt}" BorderBrush="{StaticResource BrushBorderLight}"
+                      BorderThickness="1" CornerRadius="4" Padding="2"
+                      MinWidth="{TemplateBinding ActualWidth}" MaxHeight="320">
+                <ScrollViewer>
+                  <ItemsPresenter/>
+                </ScrollViewer>
+              </Border>
+            </Popup>
           </Grid>
           <ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True">

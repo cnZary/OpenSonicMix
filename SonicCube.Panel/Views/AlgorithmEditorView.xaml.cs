@@ -29,6 +29,13 @@ public partial class AlgorithmEditorView : UserControl
         _module = module;
         InitializeComponent();
         AlgSelect.SelectionChanged += (_, _) => OnAlgorithmSelected();
+        // 整框点击展开下拉(自定义模板为非交互,这里补点击);点到弹出项时不拦截。
+        AlgSelect.PreviewMouseLeftButtonDown += (_, e) =>
+        {
+            if (AlgSelect.IsDropDownOpen) return; // 已展开,让选项正常接收点击
+            AlgSelect.IsDropDownOpen = true;
+            e.Handled = true;
+        };
         LoadAlgorithms();
     }
 

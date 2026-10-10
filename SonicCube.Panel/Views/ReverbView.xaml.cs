@@ -26,6 +26,12 @@ public partial class ReverbView : UserControl
     {
         InitializeComponent();
         AlgSelect.SelectionChanged += (_, _) => OnAlgorithmSelected();
+        AlgSelect.PreviewMouseLeftButtonDown += (_, e) =>
+        {
+            if (AlgSelect.IsDropDownOpen) return;
+            AlgSelect.IsDropDownOpen = true;
+            e.Handled = true;
+        };
         LoadAlgorithms();
         ApplyLocalization();
         Loc.LanguageChanged += ApplyLocalization;
