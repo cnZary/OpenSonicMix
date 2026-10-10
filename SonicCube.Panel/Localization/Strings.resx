@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms</value></resheader>
+
+  <data name="AppTitle" xml:space="preserve"><value>SonicCubePanel</value></data>
+
+  <!-- 通道 -->
+  <data name="ChMic1" xml:space="preserve"><value>MIC 1</value></data>
+  <data name="ChLineInst2" xml:space="preserve"><value>LINE/INST 2</value></data>
+  <data name="ChUsbPlayback" xml:space="preserve"><value>USB PLAYBACK</value></data>
+  <data name="ChOtgPlayback" xml:space="preserve"><value>OTG PLAYBACK</value></data>
+  <data name="Comp" xml:space="preserve"><value>COMP</value></data>
+  <data name="Eq" xml:space="preserve"><value>EQ</value></data>
+  <data name="Hpf" xml:space="preserve"><value>HPF</value></data>
+  <data name="Inst" xml:space="preserve"><value>INST</value></data>
+  <data name="Phantom48" xml:space="preserve"><value>48V</value></data>
+  <data name="PhaseInvert" xml:space="preserve"><value>Phase Invert</value></data>
+  <data name="Send" xml:space="preserve"><value>Send</value></data>
+  <data name="Pan" xml:space="preserve"><value>Pan L-R</value></data>
+  <data name="Volume" xml:space="preserve"><value>Volume</value></data>
+  <data name="Mute" xml:space="preserve"><value>MUTE</value></data>
+  <data name="Solo" xml:space="preserve"><value>SOLO</value></data>
+  <data name="Loopback" xml:space="preserve"><value>Loopback</value></data>
+
+  <!-- 效果区 -->
+  <data name="FxSection" xml:space="preserve"><value>Effects</value></data>
+  <data name="GlobalEq" xml:space="preserve"><value>Global EQ</value></data>
+  <data name="Reverb" xml:space="preserve"><value>Reverb</value></data>
+  <data name="Algorithm" xml:space="preserve"><value>Algorithm</value></data>
+  <data name="Reset" xml:space="preserve"><value>Reset</value></data>
+  <data name="ResetConfirm" xml:space="preserve"><value>Reset the whole device preset to defaults?</value></data>
+  <data name="Hpf75" xml:space="preserve"><value>75 Hz</value></data>
+  <data name="Hpf100" xml:space="preserve"><value>100 Hz</value></data>
+  <data name="Mic1Eq" xml:space="preserve"><value>MIC1 EQ</value></data>
+  <data name="Ch2Eq" xml:space="preserve"><value>CH2 EQ</value></data>
+
+  <!-- 总线/状态栏 -->
+  <data name="DspRec" xml:space="preserve"><value>DSP REC</value></data>
+  <data name="DspMon" xml:space="preserve"><value>DSP MON</value></data>
+  <data name="Mono" xml:space="preserve"><value>MONO</value></data>
+  <data name="MasterMute" xml:space="preserve"><value>Master Mute</value></data>
+  <data name="Efx" xml:space="preserve"><value>EFX</value></data>
+  <data name="Monitor" xml:space="preserve"><value>MONITOR</value></data>
+  <data name="OnAir" xml:space="preserve"><value>ON AIR</value></data>
+  <data name="MasterOut" xml:space="preserve"><value>Master Out</value></data>
+
+  <!-- 设置 -->
+  <data name="Settings" xml:space="preserve"><value>Settings</value></data>
+  <data name="General" xml:space="preserve"><value>General</value></data>
+  <data name="Language" xml:space="preserve"><value>Language</value></data>
+  <data name="LanguageAuto" xml:space="preserve"><value>Auto</value></data>
+  <data name="StartWithWindows" xml:space="preserve"><value>Start with Windows</value></data>
+  <data name="Connection" xml:space="preserve"><value>Connection</value></data>
+  <data name="MidiWorkMode" xml:space="preserve"><value>MIDI Work Mode</value></data>
+  <data name="ModeLowResource" xml:space="preserve"><value>Low Resource Mode</value></data>
+  <data name="ModeFastConnection" xml:space="preserve"><value>Fast Connection Mode</value></data>
+  <data name="StartupBehavior" xml:space="preserve"><value>Startup Behavior</value></data>
+  <data name="AutoEnable48V" xml:space="preserve"><value>Auto-enable 48V</value></data>
+  <data name="AutoEnableEFX" xml:space="preserve"><value>Auto-enable EFX</value></data>
+  <data name="DeviceReconnect" xml:space="preserve"><value>Device Reconnection</value></data>
+  <data name="ReapplyOnReconnect" xml:space="preserve"><value>Reapply startup actions on reconnection</value></data>
+  <data name="OnlyFastMode" xml:space="preserve"><value>Only available in Fast Connection Mode</value></data>
+  <data name="Other" xml:space="preserve"><value>Other</value></data>
+  <data name="AlwaysOnTop" xml:space="preserve"><value>Always on top</value></data>
+  <data name="LogDir" xml:space="preserve"><value>Log folder</value></data>
+  <data name="Open" xml:space="preserve"><value>Open</value></data>
+
+  <!-- 48V 安全 -->
+  <data name="PhantomWarningTitle" xml:space="preserve"><value>48V Phantom Power</value></data>
+  <data name="PhantomWarning" xml:space="preserve"><value>48V phantom power may damage connected devices that do not support it. Enable automatic 48V only if you understand the risk.</value></data>
+  <data name="PhantomConsent" xml:space="preserve"><value>I understand and allow automatic 48V phantom power.</value></data>
+
+  <!-- 状态/错误 -->
+  <data name="DeviceConnected" xml:space="preserve"><value>Device connected</value></data>
+  <data name="DeviceDisconnected" xml:space="preserve"><value>Device disconnected</value></data>
+  <data name="TrayNotRunning" xml:space="preserve"><value>Tray service is not running</value></data>
+  <data name="Error" xml:space="preserve"><value>Error</value></data>
+  <data name="Err_open_failed" xml:space="preserve"><value>Cannot open MIDI device. The port may be in use by another program (e.g. Sonic Mix).</value></data>
+  <data name="Err_timeout" xml:space="preserve"><value>Device response timeout.</value></data>
+  <data name="Err_verify" xml:space="preserve"><value>Device did not confirm the change.</value></data>
+  <data name="Err_busy" xml:space="preserve"><value>The switch is busy.</value></data>
+  <data name="Err_error" xml:space="preserve"><value>An error occurred.</value></data>
+  <data name="Err_unknown" xml:space="preserve"><value>Unknown command.</value></data>
+</root>

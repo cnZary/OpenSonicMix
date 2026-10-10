@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms</value></resheader>
+
+  <data name="AppTitle" xml:space="preserve"><value>SonicCubePanel</value></data>
+  <data name="ChMic1" xml:space="preserve"><value>MIC 1</value></data>
+  <data name="ChLineInst2" xml:space="preserve"><value>LINE/INST 2</value></data>
+  <data name="ChUsbPlayback" xml:space="preserve"><value>USB 回放</value></data>
+  <data name="ChOtgPlayback" xml:space="preserve"><value>OTG 回放</value></data>
+  <data name="Comp" xml:space="preserve"><value>COMP</value></data>
+  <data name="Eq" xml:space="preserve"><value>EQ</value></data>
+  <data name="Hpf" xml:space="preserve"><value>HPF</value></data>
+  <data name="Inst" xml:space="preserve"><value>INST</value></data>
+  <data name="Phantom48" xml:space="preserve"><value>48V</value></data>
+  <data name="PhaseInvert" xml:space="preserve"><value>反相</value></data>
+  <data name="Send" xml:space="preserve"><value>发送量</value></data>
+  <data name="Pan" xml:space="preserve"><value>声像 L-R</value></data>
+  <data name="Volume" xml:space="preserve"><value>音量</value></data>
+  <data name="Mute" xml:space="preserve"><value>静音</value></data>
+  <data name="Solo" xml:space="preserve"><value>独听</value></data>
+  <data name="Loopback" xml:space="preserve"><value>内录</value></data>
+  <data name="FxSection" xml:space="preserve"><value>效果区</value></data>
+  <data name="GlobalEq" xml:space="preserve"><value>Global EQ</value></data>
+  <data name="Reverb" xml:space="preserve"><value>混响</value></data>
+  <data name="Algorithm" xml:space="preserve"><value>算法</value></data>
+  <data name="Reset" xml:space="preserve"><value>重置</value></data>
+  <data name="ResetConfirm" xml:space="preserve"><value>确定要将整台设备的预设重置为默认值吗?</value></data>
+  <data name="Hpf75" xml:space="preserve"><value>75 Hz</value></data>
+  <data name="Hpf100" xml:space="preserve"><value>100 Hz</value></data>
+  <data name="Mic1Eq" xml:space="preserve"><value>MIC1 EQ</value></data>
+  <data name="Ch2Eq" xml:space="preserve"><value>CH2 EQ</value></data>
+  <data name="DspRec" xml:space="preserve"><value>效果录入</value></data>
+  <data name="DspMon" xml:space="preserve"><value>原声录入</value></data>
+  <data name="Mono" xml:space="preserve"><value>单声道混合</value></data>
+  <data name="MasterMute" xml:space="preserve"><value>总静音</value></data>
+  <data name="Efx" xml:space="preserve"><value>EFX</value></data>
+  <data name="Monitor" xml:space="preserve"><value>MONITOR</value></data>
+  <data name="OnAir" xml:space="preserve"><value>ON AIR</value></data>
+  <data name="MasterOut" xml:space="preserve"><value>主输出</value></data>
+  <data name="Settings" xml:space="preserve"><value>设置</value></data>
+  <data name="General" xml:space="preserve"><value>常规</value></data>
+  <data name="Language" xml:space="preserve"><value>语言</value></data>
+  <data name="LanguageAuto" xml:space="preserve"><value>自动</value></data>
+  <data name="StartWithWindows" xml:space="preserve"><value>开机自动启动</value></data>
+  <data name="Connection" xml:space="preserve"><value>连接</value></data>
+  <data name="MidiWorkMode" xml:space="preserve"><value>MIDI 工作模式</value></data>
+  <data name="ModeLowResource" xml:space="preserve"><value>低占用模式</value></data>
+  <data name="ModeFastConnection" xml:space="preserve"><value>快速连接模式</value></data>
+  <data name="StartupBehavior" xml:space="preserve"><value>启动行为</value></data>
+  <data name="AutoEnable48V" xml:space="preserve"><value>自动开启 48V</value></data>
+  <data name="AutoEnableEFX" xml:space="preserve"><value>自动开启 EFX</value></data>
+  <data name="DeviceReconnect" xml:space="preserve"><value>设备重新连接</value></data>
+  <data name="ReapplyOnReconnect" xml:space="preserve"><value>重新连接后执行启动动作</value></data>
+  <data name="OnlyFastMode" xml:space="preserve"><value>仅快速连接模式可用</value></data>
+  <data name="Other" xml:space="preserve"><value>其他</value></data>
+  <data name="AlwaysOnTop" xml:space="preserve"><value>窗口始终置顶</value></data>
+  <data name="LogDir" xml:space="preserve"><value>日志目录</value></data>
+  <data name="Open" xml:space="preserve"><value>打开</value></data>
+  <data name="PhantomWarningTitle" xml:space="preserve"><value>48V 幻象电源</value></data>
+  <data name="PhantomWarning" xml:space="preserve"><value>48V 幻象电源可能损坏不支持它的已连接设备。仅在了解风险的情况下才启用自动开启 48V。</value></data>
+  <data name="PhantomConsent" xml:space="preserve"><value>我已了解并允许自动开启 48V 幻象电源。</value></data>
+  <data name="DeviceConnected" xml:space="preserve"><value>设备已连接</value></data>
+  <data name="DeviceDisconnected" xml:space="preserve"><value>设备已断开</value></data>
+  <data name="TrayNotRunning" xml:space="preserve"><value>托盘服务未运行</value></data>
+  <data name="Error" xml:space="preserve"><value>错误</value></data>
+  <data name="Err_open_failed" xml:space="preserve"><value>无法打开 MIDI 设备。端口可能被其它程序(如 Sonic Mix)占用。</value></data>
+  <data name="Err_timeout" xml:space="preserve"><value>设备响应超时。</value></data>
+  <data name="Err_verify" xml:space="preserve"><value>设备未确认本次更改。</value></data>
+  <data name="Err_busy" xml:space="preserve"><value>该开关正忙。</value></data>
+  <data name="Err_error" xml:space="preserve"><value>发生错误。</value></data>
+  <data name="Err_unknown" xml:space="preserve"><value>未知命令。</value></data>
+</root>
