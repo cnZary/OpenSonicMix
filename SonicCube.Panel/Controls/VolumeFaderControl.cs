@@ -46,7 +46,22 @@ public sealed class VolumeFaderControl : FrameworkElement
         f.InvalidateVisual();
     }
 
-    public void SetDbSilently(double db) => SetCurrentValue(DbProperty, Math.Clamp(db, MinDb, MaxDb));
+    public void SetDbSilently(double db)
+    {
+        // 拖动中不回显。提交后若回显值仍明显偏离最后提交值,说明是旧快照,忽略。
+        if (_dragging) return;
+        if (!double.IsNaN(_awaitingConfirmDb))
+        {
+            if (Math.Abs(db - _awaitingConfirmDb) < 0.05) _awaitingConfirmDb = double.NaN; // 回包确认,恢复
+            else return; // 旧快照,忽略
+        }
+        SetCurrentValue(DbProperty, Math.Clamp(db, MinDb, MaxDb));
+    }
+
+    private void SetDbInternal(double db) => SetCurrentValue(DbProperty, Math.Clamp(db, MinDb, MaxDb));
+    private DateTime _suppressEchoUntil = DateTime.MinValue;
+    private double _awaitingConfirmDb = double.NaN;
+    private void SuppressEchoBriefly() => _suppressEchoUntil = DateTime.UtcNow.AddMilliseconds(600);
 
     private double TrackTop => 4;
     private double TrackHeight => Math.Max(10, ActualHeight - 8);
@@ -71,9 +86,10 @@ public sealed class VolumeFaderControl : FrameworkElement
         Focus();
         if (e.ClickCount == 2)
         {
-            SetDbSilently(0);
+            SetDbInternal(0);
             QueueSend(0);
             FlushPending();
+            SuppressEchoBriefly();
             e.Handled = true;
             return;
         }
@@ -96,6 +112,7 @@ public sealed class VolumeFaderControl : FrameworkElement
         _dragging = false;
         ReleaseMouseCapture();
         FlushPending();
+        SuppressEchoBriefly();
         e.Handled = true;
     }
 
@@ -103,9 +120,10 @@ public sealed class VolumeFaderControl : FrameworkElement
     {
         base.OnMouseWheel(e);
         double nd = Math.Clamp(Db + (e.Delta > 0 ? 1 : -1), MinDb, MaxDb);
-        SetDbSilently(nd);
+        SetDbInternal(nd);
         QueueSend(nd);
         FlushPending();
+        SuppressEchoBriefly();
         e.Handled = true;
     }
 
@@ -125,9 +143,10 @@ public sealed class VolumeFaderControl : FrameworkElement
         if (e.Key is Key.Up or Key.Down or Key.PageUp or Key.PageDown or Key.Home or Key.End)
         {
             nd = Math.Clamp(nd, MinDb, MaxDb);
-            SetDbSilently(nd);
+            SetDbInternal(nd);
             QueueSend(nd);
             FlushPending();
+            SuppressEchoBriefly();
             e.Handled = true;
         }
     }
@@ -136,7 +155,7 @@ public sealed class VolumeFaderControl : FrameworkElement
     {
         double nd = Math.Clamp(YToDb(y), MinDb, MaxDb);
         if (Math.Abs(nd - Db) < 0.05) return;
-        SetDbSilently(nd);
+        SetDbInternal(nd);
         ValueChanging?.Invoke(nd);
         QueueSend(nd);
     }
@@ -157,6 +176,7 @@ public sealed class VolumeFaderControl : FrameworkElement
         if (Math.Abs(_pendingDb - _lastSentDb) < 0.01) { _pendingDb = double.NaN; return; }
         _lastSentDb = _pendingDb;
         _pendingDb = double.NaN;
+        _awaitingConfirmDb = _lastSentDb; // 等待该值回包确认后再恢复回显
         ValueCommitted?.Invoke(_lastSentDb);
     }
 

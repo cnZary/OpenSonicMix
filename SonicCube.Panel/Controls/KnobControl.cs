@@ -76,7 +76,18 @@ public sealed class KnobControl : FrameworkElement
         k.InvalidateVisual();
     }
 
-    public void SetValueSilently(double v) => SetCurrentValue(ValueProperty, Math.Clamp(v, Minimum, Maximum));
+    public void SetValueSilently(double v)
+    {
+        // 拖动中或刚提交后短暂窗口内不回显,避免快照覆盖用户输入/造成回跳
+        if (_dragging || DateTime.UtcNow < _suppressEchoUntil) return;
+        SetCurrentValue(ValueProperty, Math.Clamp(v, Minimum, Maximum));
+    }
+
+    /// <summary>内部直接设置(拖动/提交路径用,不受回显抑制影响)。</summary>
+    private void SetValueInternal(double v) => SetCurrentValue(ValueProperty, Math.Clamp(v, Minimum, Maximum));
+
+    private DateTime _suppressEchoUntil = DateTime.MinValue;
+    private void SuppressEchoBriefly() => _suppressEchoUntil = DateTime.UtcNow.AddMilliseconds(600);
 
     public void Configure(double min, double max, double step, double def, string name)
     {
@@ -88,7 +99,7 @@ public sealed class KnobControl : FrameworkElement
 
     private void ResetToDefault()
     {
-        SetValueSilently(DefaultValue);
+        SetValueInternal(DefaultValue);
         ValueCommitted?.Invoke(Value);
     }
 
@@ -120,7 +131,7 @@ public sealed class KnobControl : FrameworkElement
         double delta = (_dragStartY - e.GetPosition(this).Y) * 0.01 * range;
         double nv = Snap(Math.Clamp(_dragStartValue + delta, Minimum, Maximum));
         if (Math.Abs(nv - Value) < 1e-9) return;
-        SetValueSilently(nv);
+        SetValueInternal(nv);
         ValueChanging?.Invoke(nv);
     }
 
@@ -130,6 +141,7 @@ public sealed class KnobControl : FrameworkElement
         if (!_dragging) return;
         _dragging = false;
         ReleaseMouseCapture();
+        SuppressEchoBriefly();
         ValueCommitted?.Invoke(Value);
         e.Handled = true;
     }
@@ -139,7 +151,8 @@ public sealed class KnobControl : FrameworkElement
         base.OnMouseWheel(e);
         double nv = Snap(Math.Clamp(Value + (e.Delta > 0 ? Step : -Step), Minimum, Maximum));
         if (Math.Abs(nv - Value) < 1e-9) return;
-        SetValueSilently(nv);
+        SetValueInternal(nv);
+        SuppressEchoBriefly();
         ValueCommitted?.Invoke(nv);
         e.Handled = true;
     }
@@ -158,7 +171,7 @@ public sealed class KnobControl : FrameworkElement
         if (e.Key is Key.Up or Key.Down or Key.Left or Key.Right or Key.Home or Key.End)
         {
             nv = Math.Clamp(nv, Minimum, Maximum);
-            if (Math.Abs(nv - Value) >= 1e-9) { SetValueSilently(nv); ValueCommitted?.Invoke(nv); }
+            if (Math.Abs(nv - Value) >= 1e-9) { SetValueInternal(nv); ValueCommitted?.Invoke(nv); }
             e.Handled = true;
         }
     }
@@ -199,7 +212,7 @@ public sealed class KnobControl : FrameworkElement
         if (double.TryParse(_editor.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out double v))
         {
             v = Snap(Math.Clamp(v, Minimum, Maximum));
-            SetValueSilently(v);
+            SetValueInternal(v);
             ValueCommitted?.Invoke(v);
         }
         _editor.Visibility = Visibility.Collapsed;

@@ -37,7 +37,16 @@ public sealed class PanSliderControl : FrameworkElement
         p.InvalidateVisual();
     }
 
-    public void SetValueSilently(double v) => SetCurrentValue(ValueProperty, Math.Clamp(v, -50, 50));
+    public void SetValueSilently(double v)
+    {
+        // 拖动中或刚提交后短暂窗口内不回显,避免快照回跳
+        if (_dragging || DateTime.UtcNow < _suppressEchoUntil) return;
+        SetCurrentValue(ValueProperty, Math.Clamp(v, -50, 50));
+    }
+
+    private void SetValueInternal(double v) => SetCurrentValue(ValueProperty, Math.Clamp(v, -50, 50));
+    private DateTime _suppressEchoUntil = DateTime.MinValue;
+    private void SuppressEchoBriefly() => _suppressEchoUntil = DateTime.UtcNow.AddMilliseconds(600);
 
     private double XToValue(double x)
     {
@@ -54,8 +63,9 @@ public sealed class PanSliderControl : FrameworkElement
         Focus();
         if (e.ClickCount == 2)
         {
-            SetValueSilently(0);
+            SetValueInternal(0);
             ValueCommitted?.Invoke(0);
+            SuppressEchoBriefly();
             e.Handled = true;
             return;
         }
@@ -75,7 +85,7 @@ public sealed class PanSliderControl : FrameworkElement
     {
         double nv = XToValue(x);
         if (Math.Abs(nv - Value) < 0.5) return;
-        SetValueSilently(nv);
+        SetValueInternal(nv);
         ValueChanging?.Invoke(nv);
     }
 
@@ -85,6 +95,7 @@ public sealed class PanSliderControl : FrameworkElement
         if (!_dragging) return;
         _dragging = false;
         ReleaseMouseCapture();
+        SuppressEchoBriefly();
         ValueCommitted?.Invoke(Value);
         e.Handled = true;
     }
@@ -94,7 +105,8 @@ public sealed class PanSliderControl : FrameworkElement
         base.OnMouseWheel(e);
         if (!IsEnabled) return;
         double nv = Math.Clamp(Value + (e.Delta > 0 ? 1 : -1), -50, 50);
-        SetValueSilently(nv);
+        SetValueInternal(nv);
+        SuppressEchoBriefly();
         ValueCommitted?.Invoke(nv);
         e.Handled = true;
     }
@@ -113,7 +125,8 @@ public sealed class PanSliderControl : FrameworkElement
         if (e.Key is Key.Left or Key.Right or Key.Home or Key.End)
         {
             nv = Math.Clamp(nv, -50, 50);
-            SetValueSilently(nv);
+            SetValueInternal(nv);
+            SuppressEchoBriefly();
             ValueCommitted?.Invoke(nv);
             e.Handled = true;
         }
