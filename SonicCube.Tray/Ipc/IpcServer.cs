@@ -133,6 +133,8 @@ public sealed class IpcServer
             case IpcMessageType.Subscribe:
                 _clientSubscribed = true;
                 _ = ReplyAsync(conn, msg.RequestId, true);
+                // 订阅后立即推送一次当前快照:避免 Panel 在设备握手完成前连接拿到空快照后无广播。
+                _ = SendStateSnapshotAsync(conn, null);
                 break;
             case IpcMessageType.Unsubscribe:
                 _clientSubscribed = false;

@@ -155,6 +155,36 @@ public partial class MainWindow : Window
                 timer.Start();
             }
         });
+
+        // Panel 拉起 Tray 的竞态:Panel 可能在 Tray IPC/设备握手完成前连接,get_state 拿到空/超时。
+        // 兜底:快照缺失或版本为 0 时,持续重试拉取直到拿到真实快照。
+        if (st == null || _client!.StateVersion == 0)
+        {
+            _ = RefresWhenReadyAsync();
+        }
+    }
+
+    private async Task RefresWhenReadyAsync()
+    {
+        // 设备握手可能要几秒;多轮尝试,每轮先等 Tray 连接可用再拉快照。
+        for (int i = 0; i < 40; i++)
+        {
+            await Task.Delay(400);
+            if (_client == null) return;
+            if (!_client.IsConnected)
+            {
+                string trayPath = System.IO.Path.Combine(AppContext.BaseDirectory, "SonicCube.Tray.exe");
+                await _client.EnsureConnectedAsync(trayPath);
+                continue;
+            }
+            var st = await _client.GetStateDirectAsync();
+            if (st != null && _client.StateVersion > 0)
+            {
+                RunOnUi(() => ApplySnapshot(st));
+                RunOnUi(() => { _synced = true; UpdateUiEnabled(); UpdateStatus(st.Connected); });
+                return;
+            }
+        }
     }
 
     private System.Diagnostics.Stopwatch? _t0;
