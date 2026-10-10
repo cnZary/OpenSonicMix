@@ -128,6 +128,7 @@ public partial class MainWindow : Window
 
     public async void BeginSync()
     {
+        _t0 = System.Diagnostics.Stopwatch.StartNew();
         if (_simulate) return;
         UpdateStatus(false);
         BottomBar.SetStatus(Loc.Get("TrayConnecting"));
@@ -144,8 +145,19 @@ public partial class MainWindow : Window
         {
             UpdateUiEnabled();
             if (st != null) UpdateStatus(st.Connected);
+            if (_synced && _t0 != null)
+            {
+                var el = _t0.ElapsedMilliseconds;
+                _t0 = null;
+                BottomBar.SetStatus($"{Loc.Get("Syncing")} {el} ms");
+                var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+                timer.Tick += (_, _) => { timer.Stop(); UpdateStatus(_state.Connected); };
+                timer.Start();
+            }
         });
     }
+
+    private System.Diagnostics.Stopwatch? _t0;
 
     private void ApplySettings(SettingsDto s)
     {

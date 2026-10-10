@@ -235,11 +235,12 @@ public sealed class WorkModeManager
         try
         {
             await Task.Delay(TimeSpan.FromSeconds(seconds), ct);
-            // 复查:仍有命令、Panel 打开、模式已切换则放弃断开。
+            // 复查:仍有命令、Panel 打开、模式已切换、或已断开则放弃。
             if (ct.IsCancellationRequested) return;
             if (CurrentMode != WorkMode.LowResource) return;
             if (_coordinator.PanelOpen) { ScheduleIdleDisconnect(); return; }
             if (_coordinator.HasPendingWork) { ScheduleIdleDisconnect(); return; }
+            if (!_coordinator.IsConnected) return; // 已释放,避免重复断开
             Logging.Logger.Info("Device", "低占用模式空闲超时,释放 MIDI 端口");
             await _coordinator.DisconnectAsync("低占用模式空闲超时");
         }

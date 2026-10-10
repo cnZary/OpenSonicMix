@@ -15,7 +15,7 @@ Sonicake **Sonic Cube II** 声卡的 Windows 控制软件，用于替代官方 S
 ## 架构
 
 ```
-SonicCube.Panel (WinForms, 按需启动)
+SonicCube.Panel (WPF + 内置 Fluent 主题, 按需启动)
       │  Named Pipe IPC
       ▼
 SonicCube.Tray (NativeAOT 原生进程, 长期驻留)
@@ -35,7 +35,7 @@ Sonic Cube II 设备
 | `SonicCube.Protocol/` | 纯协议库：SysEx 帧编解码、命令地址表(`Commands/`)、183 字节分片重组(`Frames/`)、预设/全局状态模型(`Models/PresetState.cs`、`GlobalState.cs`)、数值换算(`ValueMapping.cs`)、15 算法 70 参数效果表(`Models/FxCatalog.cs`)。 |
 | `SonicCube.Shared/` | NativeAOT 兼容的 WinMM MIDI 封装(`Midi/WinMM.cs`、`MidiDevice.cs`)、高层会话(`Midi/DeviceSession.cs`，含握手重试、float 参数读回验证)、IPC 消息模型与管道封装(`Ipc/`)。 |
 | `SonicCube.Tray/` | NativeAOT 原生托盘进程:Win32 托盘、单实例 Mutex、异步命令协调器 `DeviceCoordinator`、双工作模式 `WorkModeManager`、启动/重连自动动作、Named Pipe IPC 服务端、滚动日志(`Logging/Logger.cs`)、Windows 自启(`Startup/StartupManager.cs`)。 |
-| `SonicCube.Panel/` | WinForms 完整控制面板：输入通道 MIC1 / LINE-INST2，回放 USB / OTG，效果区 COMP / GlobalEQ / INST / EQ / HPF / RVB，总线，电平表，设置页。 |
+| `SonicCube.Panel/` | WPF 完整控制面板(官方内置 Fluent 主题):输入通道 MIC1 / LINE-INST2，回放 USB / OTG，效果区 COMP / GlobalEQ / INST / EQ / HPF / RVB，总线，电平表，设置页。 |
 | `SonicCube.Protocol.Tests/` | 25 个协议单元测试(MSTest)。 |
 | `SonicCube.DeviceConsole/` | 真实设备协议验证控制台(子命令 `enum` / `status` / `efx` / `p48` / `raw`)。 |
 
@@ -105,9 +105,8 @@ dotnet run --project SonicCube.DeviceConsole -- raw        # 原始收发
 ```
 publish/
 ├── SonicCube.Tray.exe    # NativeAOT 原生 exe, 无运行时依赖
-├── SonicCube.Panel.exe   # 框架依赖单文件, 需 .NET 10 Desktop Runtime
-├── zh-CN/                # 中文本地化资源
-└── en-US/                # 英文本地化资源
+├── SonicCube.Panel.exe   # 框架依赖单文件(WPF + 内置 Fluent), 需 .NET 10 Desktop Runtime
+└── zh-CN/                # 中文本地化卫星资源(en-US 为默认,内嵌主程序集)
 ```
 
 ### 运行要求
