@@ -18,30 +18,41 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Publish Tray (NativeAOT, no runtime dependency)
+      # ---- static (self-contained) build ----
+      - name: Publish Tray (NativeAOT)
         run: dotnet publish SonicCube.Tray/SonicCube.Tray.csproj -c Release -r win-x64
 
-      - name: Publish Panel (framework-dependent single file)
-        run: dotnet publish SonicCube.Panel/SonicCube.Panel.csproj -c Release -r win-x64
+      - name: Publish Panel (self-contained single file)
+        run: dotnet publish SonicCube.Panel/SonicCube.Panel.csproj -c Release -r win-x64 --self-contained true
 
-      - name: Publish Panel satellite assemblies (zh-CN)
+      - name: Build Panel satellite assemblies (zh-CN)
         run: dotnet build SonicCube.Panel/SonicCube.Panel.csproj -c Release --no-restore -p:SatelliteResourceLanguages=zh-CN -o artifacts/satellite
 
-      - name: Package static (fully native) bundle
+      - name: Package static bundle (Tray + Panel, no runtime needed)
         shell: pwsh
         run: |
           $ver = "${{ github.ref_name }}"
           $out = "artifacts/static"
-          New-Item -ItemType Directory -Force $out | Out-Null
+          New-Item -ItemType Directory -Force "$out/zh-CN" | Out-Null
           Copy-Item "SonicCube.Tray/bin/Release/net10.0-windows/win-x64/publish/SonicCube.Tray.exe" $out
+          Copy-Item "SonicCube.Panel/bin/Release/net10.0-windows/win-x64/publish/SonicCube.Panel.exe" $out
+          Copy-Item "artifacts/satellite/zh-CN/*" "$out/zh-CN/" -ErrorAction SilentlyContinue
           Compress-Archive -Path "$out/*" -DestinationPath "artifacts/OpenSonicMix-$ver-win-x64-static.zip" -Force
 
-      - name: Package .NET 10 framework-dependent bundle
+      # ---- framework-dependent (.NET 10) build ----
+      - name: Publish Tray (framework-dependent single file)
+        run: dotnet publish SonicCube.Tray/SonicCube.Tray.csproj -c Release -r win-x64 --self-contained false -p:PublishAot=false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+
+      - name: Publish Panel (framework-dependent single file)
+        run: dotnet publish SonicCube.Panel/SonicCube.Panel.csproj -c Release -r win-x64
+
+      - name: Package .NET 10 framework-dependent bundle (Tray + Panel, needs .NET 10 runtime)
         shell: pwsh
         run: |
           $ver = "${{ github.ref_name }}"
           $out = "artifacts/net10"
           New-Item -ItemType Directory -Force "$out/zh-CN" | Out-Null
+          Copy-Item "SonicCube.Tray/bin/Release/net10.0-windows/win-x64/publish/SonicCube.Tray.exe" $out
           Copy-Item "SonicCube.Panel/bin/Release/net10.0-windows/win-x64/publish/SonicCube.Panel.exe" $out
           Copy-Item "artifacts/satellite/zh-CN/*" "$out/zh-CN/" -ErrorAction SilentlyContinue
           Compress-Archive -Path "$out/*" -DestinationPath "artifacts/OpenSonicMix-$ver-win-x64-net10.zip" -Force
