@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version (e.g. 0.1, becomes tag v0.1)
+        required: true
+        default: "0.1"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Publish release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Publish Tray (NativeAOT, no runtime dependency)
+        run: dotnet publish SonicCube.Tray/SonicCube.Tray.csproj -c Release -r win-x64
+
+      - name: Publish Panel (framework-dependent single file)
+        run: dotnet publish SonicCube.Panel/SonicCube.Panel.csproj -c Release -r win-x64
+
+      - name: Package static (fully native) bundle
+        shell: pwsh
+        run: |
+          $ver = "${{ github.event.inputs.version }}"
+          $out = "artifacts/static"
+          New-Item -ItemType Directory -Force $out | Out-Null
+          Copy-Item "SonicCube.Tray/bin/Release/net10.0-windows/win-x64/publish/SonicCube.Tray.exe" $out
+          Compress-Archive -Path "$out/*" -DestinationPath "artifacts/OpenSonicMix-v$ver-win-x64-static.zip" -Force
+
+      - name: Package .NET 10 framework-dependent bundle
+        shell: pwsh
+        run: |
+          $ver = "${{ github.event.inputs.version }}"
+          $out = "artifacts/net10"
+          New-Item -ItemType Directory -Force "$out/zh-CN" | Out-Null
+          Copy-Item "SonicCube.Panel/bin/Release/net10.0-windows/win-x64/publish/SonicCube.Panel.exe" $out
+          Copy-Item "SonicCube.Panel/bin/Release/net10.0-windows/win-x64/publish/zh-CN/*" "$out/zh-CN/" -ErrorAction SilentlyContinue
+          Compress-Archive -Path "$out/*" -DestinationPath "artifacts/OpenSonicMix-v$ver-win-x64-net10.zip" -Force
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ver = "${{ github.event.inputs.version }}"
+          gh release create "v$ver" "artifacts/OpenSonicMix-v$ver-win-x64-static.zip" "artifacts/OpenSonicMix-v$ver-win-x64-net10.zip" --title "v$ver" --generate-notes
+        shell: pwsh
