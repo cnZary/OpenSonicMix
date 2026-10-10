@@ -1,0 +1,53 @@
+<Window x:Class="SonicCube.Panel.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:v="clr-namespace:SonicCube.Panel.Views"
+        Title="SonicCubePanel"
+        Width="1150" Height="880"
+        MinWidth="980" MinHeight="700"
+        Background="{StaticResource BrushWindow}"
+        WindowStartupLocation="CenterScreen">
+  <Grid Margin="8">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="*"/>      <!-- 主工作区 -->
+      <RowDefinition Height="Auto"/>   <!-- 底部全局控制条 -->
+    </Grid.RowDefinitions>
+
+    <!-- 主工作区 -->
+    <Grid Grid.Row="0">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="170" MinWidth="150"/>   <!-- MIC 1 (~15%) -->
+        <ColumnDefinition Width="170" MinWidth="150"/>   <!-- LINE/INST 2 (~15%) -->
+        <ColumnDefinition Width="*" MinWidth="480"/>     <!-- 中央 (~52%) -->
+        <ColumnDefinition Width="185" MinWidth="170"/>   <!-- 主输出 (~16%) -->
+      </Grid.ColumnDefinitions>
+
+      <Border x:Name="Mic1Host" Grid.Column="0" Margin="0,0,4,0"/>
+      <Border x:Name="Line2Host" Grid.Column="1" Margin="4,0,4,0"/>
+
+      <!-- 中央:上方效果编辑,下方回放+混响 -->
+      <Grid Grid.Column="2" Margin="4,0,4,0">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>   <!-- 效果编辑区(按内容高度,不留空白) -->
+          <RowDefinition Height="*"/>      <!-- 回放 + 混响(占满剩余) -->
+        </Grid.RowDefinitions>
+        <v:EffectSectionView x:Name="Fx" Grid.Row="0" Margin="0,0,0,4"/>
+        <Grid Grid.Row="1" Margin="0,4,0,0">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="Auto"/>
+          </Grid.ColumnDefinitions>
+          <Border x:Name="UsbHost" Grid.Column="0" Margin="0,0,4,0"/>
+          <Border x:Name="OtgHost" Grid.Column="1" Margin="4,0,4,0"/>
+          <v:ReverbView x:Name="Rvb" Grid.Column="2" Width="160" Margin="4,0,0,0"/>
+        </Grid>
+      </Grid>
+
+      <v:MasterOutView x:Name="Master" Grid.Column="3" Margin="4,0,0,0"/>
+    </Grid>
+
+    <!-- 底部全局控制条 -->
+    <v:BottomBarView x:Name="BottomBar" Grid.Row="1" Margin="0,6,0,0"/>
+  </Grid>
+</Window>

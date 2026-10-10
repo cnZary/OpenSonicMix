@@ -65,6 +65,11 @@
   <data name="DeviceConnected" xml:space="preserve"><value>设备已连接</value></data>
   <data name="DeviceDisconnected" xml:space="preserve"><value>设备已断开</value></data>
   <data name="TrayNotRunning" xml:space="preserve"><value>托盘服务未运行</value></data>
+  <data name="TrayConnecting" xml:space="preserve"><value>正在连接托盘服务…</value></data>
+  <data name="Syncing" xml:space="preserve"><value>正在同步设备状态…</value></data>
+  <data name="Menu" xml:space="preserve"><value>菜单</value></data>
+  <data name="Simulated" xml:space="preserve"><value>模拟(无设备)</value></data>
+  <data name="Cancel" xml:space="preserve"><value>取消</value></data>
   <data name="Error" xml:space="preserve"><value>错误</value></data>
   <data name="Err_open_failed" xml:space="preserve"><value>无法打开 MIDI 设备。端口可能被其它程序(如 Sonic Mix)占用。</value></data>
   <data name="Err_timeout" xml:space="preserve"><value>设备响应超时。</value></data>

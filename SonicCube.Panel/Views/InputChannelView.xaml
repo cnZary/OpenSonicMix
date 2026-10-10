@@ -1,0 +1,73 @@
+<UserControl x:Class="SonicCube.Panel.Views.InputChannelView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:SonicCube.Panel.Controls"
+             MinWidth="148">
+  <Border Style="{StaticResource ChannelCard}">
+    <Grid>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>   <!-- 模块按钮 2×2 -->
+        <RowDefinition Height="Auto"/>   <!-- 反相 -->
+        <RowDefinition Height="Auto"/>   <!-- SEND 旋钮 -->
+        <RowDefinition Height="Auto"/>   <!-- 发送量标签 -->
+        <RowDefinition Height="Auto"/>   <!-- 声像 -->
+        <RowDefinition Height="Auto"/>   <!-- 名称 -->
+        <RowDefinition Height="*"/>      <!-- 推子 + M/S + 电平 -->
+        <RowDefinition Height="Auto"/>   <!-- 推子数值 -->
+      </Grid.RowDefinitions>
+
+      <!-- 功能按钮 -->
+      <Grid Grid.Row="0" Margin="0,0,0,4">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <ToggleButton x:Name="BtnComp" Grid.Row="0" Grid.Column="0" Style="{StaticResource ChannelToggle}" Margin="0,0,2,2"/>
+        <ToggleButton x:Name="BtnEq"   Grid.Row="0" Grid.Column="1" Style="{StaticResource ChannelToggle}" Margin="2,0,0,2"/>
+        <!-- MIC1: HPF + 48V 两列;CH2: HPF 横跨 -->
+        <ToggleButton x:Name="BtnHpf"  Grid.Row="1" Grid.Column="0" Style="{StaticResource ChannelToggle}" Margin="0,2,2,0"/>
+        <ToggleButton x:Name="Btn48V"  Grid.Row="1" Grid.Column="1" Style="{StaticResource ChannelToggle}" Margin="2,2,0,0"/>
+      </Grid>
+
+      <!-- 反相(居中) -->
+      <ToggleButton x:Name="BtnPhase" Grid.Row="1" Style="{StaticResource ChannelToggle}"
+                    Width="40" HorizontalAlignment="Center" Margin="0,2,0,4"/>
+
+      <!-- SEND 旋钮 -->
+      <c:KnobControl x:Name="SendKnob" Grid.Row="2" Width="62" Height="80" HorizontalAlignment="Center"/>
+      <TextBlock x:Name="SendLabel" Grid.Row="3" Style="{StaticResource LabelText}" Margin="0,2,0,2"/>
+
+      <!-- 声像 -->
+      <c:PanSliderControl x:Name="Pan" Grid.Row="4" Margin="4,2,4,4"/>
+
+      <!-- 名称 -->
+      <TextBlock x:Name="Title" Grid.Row="5" Style="{StaticResource TitleText}" Margin="0,2,0,2"/>
+
+      <!-- 推子 + M/S + 电平 -->
+      <Grid Grid.Row="6" Margin="0,2,0,0" MinHeight="200">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <c:VolumeFaderControl x:Name="Fader" Grid.Column="0" HorizontalAlignment="Center" Width="44"/>
+        <Grid Grid.Column="1" Width="48">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+          </Grid.RowDefinitions>
+          <ToggleButton x:Name="BtnMute" Grid.Row="0" Style="{StaticResource ChannelToggle}" Width="40" Margin="0,0,0,2"/>
+          <ToggleButton x:Name="BtnSolo" Grid.Row="1" Style="{StaticResource ChannelToggle}" Width="40" Margin="0,0,0,4"/>
+          <c:MeterBar x:Name="Meter" Grid.Row="2" Width="24" HorizontalAlignment="Center"/>
+        </Grid>
+      </Grid>
+
+      <!-- 推子数值 -->
+      <TextBlock x:Name="FaderValue" Grid.Row="7" Style="{StaticResource ValueText}" Margin="0,2,0,0"/>
+    </Grid>
+  </Border>
+</UserControl>

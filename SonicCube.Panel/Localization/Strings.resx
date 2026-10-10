@@ -77,6 +77,11 @@
   <data name="DeviceConnected" xml:space="preserve"><value>Device connected</value></data>
   <data name="DeviceDisconnected" xml:space="preserve"><value>Device disconnected</value></data>
   <data name="TrayNotRunning" xml:space="preserve"><value>Tray service is not running</value></data>
+  <data name="TrayConnecting" xml:space="preserve"><value>Connecting to tray service…</value></data>
+  <data name="Syncing" xml:space="preserve"><value>Syncing device state…</value></data>
+  <data name="Menu" xml:space="preserve"><value>Menu</value></data>
+  <data name="Simulated" xml:space="preserve"><value>Simulated (no device)</value></data>
+  <data name="Cancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="Error" xml:space="preserve"><value>Error</value></data>
   <data name="Err_open_failed" xml:space="preserve"><value>Cannot open MIDI device. The port may be in use by another program (e.g. Sonic Mix).</value></data>
   <data name="Err_timeout" xml:space="preserve"><value>Device response timeout.</value></data>

@@ -1,0 +1,38 @@
+<UserControl x:Class="SonicCube.Panel.Views.PlaybackChannelView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:SonicCube.Panel.Controls"
+             MinWidth="120">
+  <Border Style="{StaticResource ChannelCard}">
+    <Grid>
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>   <!-- 内录/路由 -->
+          <RowDefinition Height="Auto"/>   <!-- 名称 -->
+          <RowDefinition Height="*"/>      <!-- 推子 + M + 电平 -->
+          <RowDefinition Height="Auto"/>   <!-- 数值 -->
+        </Grid.RowDefinitions>
+
+      <ToggleButton x:Name="BtnLoopback" Grid.Row="0" Style="{StaticResource ChannelToggle}" Margin="0,0,0,4"/>
+
+      <TextBlock x:Name="Title" Grid.Row="1" Style="{StaticResource TitleText}" Margin="0,0,0,2"/>
+
+      <Grid Grid.Row="2" MinHeight="150">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <c:VolumeFaderControl x:Name="Fader" Grid.Column="0" HorizontalAlignment="Center" Width="44"/>
+        <Grid Grid.Column="1" Width="42">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+          </Grid.RowDefinitions>
+          <ToggleButton x:Name="BtnMute" Grid.Row="0" Style="{StaticResource ChannelToggle}" Width="36" Margin="0,0,0,4"/>
+          <c:MeterBar x:Name="Meter" Grid.Row="1" Width="22" HorizontalAlignment="Center"/>
+        </Grid>
+      </Grid>
+
+      <TextBlock x:Name="FaderValue" Grid.Row="3" Style="{StaticResource ValueText}" Margin="0,2,0,0"/>
+    </Grid>
+  </Border>
+</UserControl>

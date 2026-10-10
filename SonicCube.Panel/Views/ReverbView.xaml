@@ -1,0 +1,23 @@
+<UserControl x:Class="SonicCube.Panel.Views.ReverbView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:SonicCube.Panel.Controls"
+             MinWidth="130">
+  <Border Style="{StaticResource ChannelCard}">
+    <Grid>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>   <!-- 标题 -->
+        <RowDefinition Height="Auto"/>   <!-- 算法下拉 -->
+        <RowDefinition Height="*"/>      <!-- 参数旋钮 -->
+      </Grid.RowDefinitions>
+      <TextBlock x:Name="Title" Grid.Row="0" Style="{StaticResource TitleText}" Margin="0,0,0,4"/>
+      <ComboBox x:Name="AlgSelect" Grid.Row="1" Margin="0,0,0,8" Style="{StaticResource MixerCombo}"
+                ItemContainerStyle="{StaticResource MixerComboItem}"/>
+      <Border Grid.Row="2" Background="{StaticResource BrushPanelAlt}" BorderBrush="{StaticResource BrushBorder}"
+              BorderThickness="1" CornerRadius="4" Padding="4">
+        <Grid x:Name="KnobHost" VerticalAlignment="Center"/>
+      </Border>
+      <Border x:Name="Mask" Grid.RowSpan="3" Background="#AA141418" Visibility="Collapsed" Panel.ZIndex="10"/>
+    </Grid>
+  </Border>
+</UserControl>

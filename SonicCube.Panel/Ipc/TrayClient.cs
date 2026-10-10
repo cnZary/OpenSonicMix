@@ -1,4 +1,5 @@
 using System.IO.Pipes;
+using System.IO;
 using SonicCube.Shared.Ipc;
 
 namespace SonicCube.Panel.Ipc;
@@ -116,6 +117,17 @@ public sealed class TrayClient : IDisposable
 
     public Task<IpcMessage?> SetFxParamAsync(int module, int paramIndex, float value, CancellationToken ct = default) =>
         SendRequestAsync(new IpcMessage { Type = IpcMessageType.SetParameter, Module = module, ParamIndex = paramIndex, FloatValue = value }, ct);
+
+    /// <summary>尽力发送退订(关闭时调用,不等待)。</summary>
+    public async Task SendUnsubscribeQuiet()
+    {
+        try
+        {
+            if (IsConnected && _conn != null)
+                await _conn.SendAsync(new IpcMessage { Type = IpcMessageType.Unsubscribe });
+        }
+        catch { }
+    }
 
     private async Task<IpcMessage?> SendRequestAsync(IpcMessage msg, CancellationToken ct)
     {

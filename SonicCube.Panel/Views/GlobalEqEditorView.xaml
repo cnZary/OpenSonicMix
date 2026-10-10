@@ -1,0 +1,19 @@
+<UserControl x:Class="SonicCube.Panel.Views.GlobalEqEditorView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="clr-namespace:SonicCube.Panel.Controls">
+  <Grid>
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="*"/>
+      <ColumnDefinition Width="Auto"/>
+    </Grid.ColumnDefinitions>
+    <c:GraphicEqControl x:Name="Eq" Grid.Column="0"/>
+    <!-- 右侧总音量(UI -50~+50 ↔ 协议 0~100) -->
+    <StackPanel Grid.Column="1" Width="64" Margin="6,0,0,0">
+      <TextBlock x:Name="VolLabel" Style="{StaticResource LabelText}" Text="VOL"/>
+      <c:LinearFaderControl x:Name="Vol" Width="36" Height="150" HorizontalAlignment="Center"/>
+      <TextBlock x:Name="VolValue" Style="{StaticResource ValueText}"/>
+    </StackPanel>
+    <Border x:Name="Mask" Grid.ColumnSpan="2" Background="#AA141418" Visibility="Collapsed" Panel.ZIndex="10"/>
+  </Grid>
+</UserControl>
