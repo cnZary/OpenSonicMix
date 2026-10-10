@@ -166,7 +166,7 @@ public partial class MainWindow : Window
 
     private async Task RefresWhenReadyAsync()
     {
-        // 设备握手可能要几秒;多轮尝试,每轮先等 Tray 连接可用再拉快照。
+        // 设备握手可能要几秒;多轮尝试,每轮先等 Tray 连接可用再(重新)订阅并拉快照。
         for (int i = 0; i < 40; i++)
         {
             await Task.Delay(400);
@@ -175,6 +175,8 @@ public partial class MainWindow : Window
             {
                 string trayPath = System.IO.Path.Combine(AppContext.BaseDirectory, "SonicCube.Tray.exe");
                 await _client.EnsureConnectedAsync(trayPath);
+                // 重连后必须重新订阅(冷启动时首次 subscribe 可能已超时,导致电平广播被抑制)。
+                await _client.SubscribeAsync();
                 continue;
             }
             var st = await _client.GetStateDirectAsync();

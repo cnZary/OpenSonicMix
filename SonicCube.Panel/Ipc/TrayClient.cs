@@ -130,6 +130,10 @@ public sealed class TrayClient : IDisposable
         return resp?.State;
     }
 
+    /// <summary>单独订阅(重连后重新建立电平/状态广播)。</summary>
+    public Task<IpcMessage?> SubscribeAsync(CancellationToken ct = default) =>
+        SendRequestAsync(new IpcMessage { Type = IpcMessageType.Subscribe }, ct);
+
     /// <summary>尽力发送退订(关闭时调用,不等待)。</summary>
     public async Task SendUnsubscribeQuiet()
     {
