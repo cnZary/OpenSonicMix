@@ -4,7 +4,7 @@
         xmlns:v="clr-namespace:SonicCube.Panel.Views"
         Title="SonicCubePanel"
         Width="1150" Height="880"
-        MinWidth="980" MinHeight="700"
+        MinWidth="1080" MinHeight="700"
         Background="{StaticResource BrushWindow}"
         WindowStartupLocation="CenterScreen">
   <Grid Margin="8">
