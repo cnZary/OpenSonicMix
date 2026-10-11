@@ -124,7 +124,28 @@
     </Setter>
   </Style>
 
-  <!-- 设置窗用 CheckBox/RadioButton:无动画简单模板,避免 Fluent Storyboard 动画 Background 崩溃 -->
+  <!-- 设置窗紧凑 GroupBox(Fluent 默认内边距过大) -->
+  <Style x:Key="CompactGroup" TargetType="GroupBox">
+    <Setter Property="Foreground" Value="{StaticResource BrushText}"/>
+    <Setter Property="Margin" Value="0,0,0,8"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="GroupBox">
+          <Border Background="{StaticResource BrushPanel}" BorderBrush="{StaticResource BrushBorder}"
+                  BorderThickness="1" CornerRadius="6" Padding="10,6,10,8">
+            <StackPanel>
+              <ContentPresenter ContentSource="Header" Margin="0,0,0,4"
+                                TextElement.FontWeight="SemiBold" TextElement.FontSize="11"
+                                TextElement.Foreground="{StaticResource BrushTextSecondary}"/>
+              <ContentPresenter/>
+            </StackPanel>
+          </Border>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- 设置窗紧凑 CheckBox/RadioButton:无动画简单模板,避免 Fluent Storyboard 动画 Background 崩溃 -->
   <Style x:Key="PlainCheck" TargetType="CheckBox">
     <Setter Property="Foreground" Value="{StaticResource BrushText}"/>
     <Setter Property="FontSize" Value="12"/>
@@ -278,9 +299,10 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="24"/>
               </Grid.ColumnDefinitions>
-              <ContentPresenter Grid.Column="0" Margin="8,0,0,0" VerticalAlignment="Center"
-                                HorizontalAlignment="Left"
-                                Content="{TemplateBinding SelectionBoxItem}"/>
+              <TextBlock Grid.Column="0" Margin="8,0,0,0" VerticalAlignment="Center"
+                         HorizontalAlignment="Left"
+                         Foreground="{TemplateBinding Foreground}" FontSize="{TemplateBinding FontSize}"
+                         Text="{Binding SelectionBoxItem, RelativeSource={RelativeSource TemplatedParent}}"/>
               <Path Grid.Column="1" Data="M0,0 L8,0 L4,5 Z" Fill="{StaticResource BrushTextSecondary}"
                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Grid>

@@ -1,57 +1,62 @@
 <Window x:Class="SonicCube.Panel.Views.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Settings" Width="480" Height="600"
+        Title="Settings" Width="440" SizeToContent="Height"
         Background="{StaticResource BrushWindow}"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize">
-  <ScrollViewer VerticalScrollBarVisibility="Auto">
-    <StackPanel Margin="16">
-      <GroupBox x:Name="GGeneral" Header="General" Foreground="{StaticResource BrushText}" Margin="0,0,0,10">
-        <StackPanel Margin="8">
-          <Grid Margin="0,4">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+  <Grid Margin="12">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
+
+    <StackPanel Grid.Row="0" VerticalAlignment="Top">
+      <GroupBox x:Name="GGeneral" Header="General" Style="{StaticResource CompactGroup}">
+        <StackPanel>
+          <Grid>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
             <TextBlock x:Name="LLanguage" Style="{StaticResource LabelText}" TextAlignment="Left" VerticalAlignment="Center"/>
-            <ComboBox x:Name="Lang" Grid.Column="1" Height="26"/>
+            <ComboBox x:Name="Lang" Grid.Column="1" Height="26" Style="{StaticResource MixerCombo}" ItemContainerStyle="{StaticResource MixerComboItem}"/>
           </Grid>
-          <CheckBox x:Name="StartWithWindows" Style="{StaticResource PlainCheck}" Margin="0,6,0,2"/>
+          <CheckBox x:Name="StartWithWindows" Style="{StaticResource PlainCheck}" Margin="0,8,0,0"/>
         </StackPanel>
       </GroupBox>
 
-      <GroupBox x:Name="GConn" Header="Connection" Foreground="{StaticResource BrushText}" Margin="0,0,0,10">
-        <StackPanel Margin="8">
+      <GroupBox x:Name="GConn" Header="Connection" Style="{StaticResource CompactGroup}">
+        <StackPanel>
           <TextBlock x:Name="LMidiWorkMode" Style="{StaticResource LabelText}" TextAlignment="Left"/>
-          <RadioButton x:Name="ModeLow" Style="{StaticResource PlainRadio}" Margin="0,6,0,2" GroupName="mode"/>
-          <RadioButton x:Name="ModeFast" Style="{StaticResource PlainRadio}" Margin="0,2" GroupName="mode"/>
+          <RadioButton x:Name="ModeLow" Style="{StaticResource PlainRadio}" Margin="0,4,0,0" GroupName="mode"/>
+          <RadioButton x:Name="ModeFast" Style="{StaticResource PlainRadio}" Margin="0,2,0,0" GroupName="mode"/>
         </StackPanel>
       </GroupBox>
 
-      <GroupBox x:Name="GStartup" Header="Startup Behavior" Foreground="{StaticResource BrushText}" Margin="0,0,0,10">
-        <StackPanel Margin="8">
-          <CheckBox x:Name="Enable48V" Style="{StaticResource PlainCheck}" Margin="0,4"/>
-          <CheckBox x:Name="EnableEFX" Style="{StaticResource PlainCheck}" Margin="0,4"/>
+      <GroupBox x:Name="GStartup" Header="Startup Behavior" Style="{StaticResource CompactGroup}">
+        <StackPanel>
+          <CheckBox x:Name="Enable48V" Style="{StaticResource PlainCheck}"/>
+          <CheckBox x:Name="EnableEFX" Style="{StaticResource PlainCheck}" Margin="0,2,0,0"/>
         </StackPanel>
       </GroupBox>
 
-      <GroupBox x:Name="GReconnect" Header="Device Reconnection" Foreground="{StaticResource BrushText}" Margin="0,0,0,10">
-        <StackPanel Margin="8">
-          <CheckBox x:Name="Reapply" Style="{StaticResource PlainCheck}" Margin="0,4"/>
-          <TextBlock x:Name="ReapplyHint" Style="{StaticResource LabelText}" TextAlignment="Left" Margin="18,0,0,2"/>
+      <GroupBox x:Name="GReconnect" Header="Device Reconnection" Style="{StaticResource CompactGroup}">
+        <StackPanel>
+          <CheckBox x:Name="Reapply" Style="{StaticResource PlainCheck}"/>
+          <TextBlock x:Name="ReapplyHint" Style="{StaticResource LabelText}" TextAlignment="Left" Margin="24,2,0,0"/>
         </StackPanel>
       </GroupBox>
 
-      <GroupBox x:Name="GOther" Header="Other" Foreground="{StaticResource BrushText}" Margin="0,0,0,10">
-        <StackPanel Margin="8">
-          <CheckBox x:Name="AlwaysOnTop" Style="{StaticResource PlainCheck}" Margin="0,4"/>
-          <Grid Margin="0,4">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+      <GroupBox x:Name="GOther" Header="Other" Style="{StaticResource CompactGroup}">
+        <StackPanel>
+          <CheckBox x:Name="AlwaysOnTop" Style="{StaticResource PlainCheck}"/>
+          <Grid Margin="0,4,0,0">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="110"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
             <TextBlock x:Name="LLogDir" Style="{StaticResource LabelText}" TextAlignment="Left" VerticalAlignment="Center"/>
             <Button x:Name="OpenLog" Grid.Column="1" Style="{StaticResource SubtleButton}" HorizontalAlignment="Left"/>
           </Grid>
         </StackPanel>
       </GroupBox>
-
-      <Button x:Name="CloseBtn" Style="{StaticResource SubtleButton}" HorizontalAlignment="Right" Width="90" Content="OK"/>
     </StackPanel>
-  </ScrollViewer>
+
+    <Button x:Name="CloseBtn" Grid.Row="1" Style="{StaticResource SubtleButton}" HorizontalAlignment="Right" Width="90" Content="OK"/>
+  </Grid>
 </Window>
