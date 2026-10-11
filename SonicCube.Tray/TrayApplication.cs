@@ -201,13 +201,23 @@ internal sealed class TrayApplication : IDisposable
     {
         var menu = Win32.CreatePopupMenu();
 
-        // 六个快速开关(不显示勾选状态,点击一次请求切换一次)。
-        Win32.AppendMenu(menu, Win32.MF_STRING, (IntPtr)Cmd48V, S(Localization.TrayStrings.Key.Switch48V));
-        Win32.AppendMenu(menu, Win32.MF_STRING, (IntPtr)CmdEfx, S(Localization.TrayStrings.Key.SwitchEFX));
-        Win32.AppendMenu(menu, Win32.MF_STRING, (IntPtr)CmdMonitor, S(Localization.TrayStrings.Key.SwitchMonitor));
-        Win32.AppendMenu(menu, Win32.MF_STRING, (IntPtr)CmdOnAir, S(Localization.TrayStrings.Key.SwitchOnAir));
-        Win32.AppendMenu(menu, Win32.MF_STRING, (IntPtr)CmdMasterMute, S(Localization.TrayStrings.Key.SwitchMasterMute));
-        Win32.AppendMenu(menu, Win32.MF_STRING, (IntPtr)CmdMono, S(Localization.TrayStrings.Key.SwitchMono));
+        // 六个快速开关:已连接=实时勾选;低占用空闲=断开前最后状态;未连接过=全不勾。
+        var sw = _coordinator.GetSwitchStates();
+        void AddSwitch(int cmdId, Localization.TrayStrings.Key key, int state)
+        {
+            uint flags = Win32.MF_STRING;
+            if (sw.HasData && state == 1)
+                flags |= (uint)Win32.MF_CHECKED;
+            else
+                flags |= (uint)Win32.MF_UNCHECKED;
+            Win32.AppendMenu(menu, flags, (IntPtr)cmdId, S(key));
+        }
+        AddSwitch(Cmd48V, Localization.TrayStrings.Key.Switch48V, sw.Phantom48V);
+        AddSwitch(CmdEfx, Localization.TrayStrings.Key.SwitchEFX, sw.Efx);
+        AddSwitch(CmdMonitor, Localization.TrayStrings.Key.SwitchMonitor, sw.Monitor);
+        AddSwitch(CmdOnAir, Localization.TrayStrings.Key.SwitchOnAir, sw.OnAir);
+        AddSwitch(CmdMasterMute, Localization.TrayStrings.Key.SwitchMasterMute, sw.MasterMute);
+        AddSwitch(CmdMono, Localization.TrayStrings.Key.SwitchMono, sw.MonoSw);
         Win32.AppendMenu(menu, Win32.MF_SEPARATOR, IntPtr.Zero, null);
 
         // 工作模式子菜单(单选)。

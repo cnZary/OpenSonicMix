@@ -49,6 +49,71 @@ public sealed class DeviceCoordinator
     public bool IsConnected => State == ConnectionState.Connected;
     public long ConnectEpoch { get { lock (_sync) return _connectEpoch; } }
 
+    /// <summary>快速开关的最后已知状态(低占用模式释放后仍可用,见需求 4.2 菜单勾选)。</summary>
+    public sealed class SwitchStateSnapshot
+    {
+        public int Phantom48V { get; set; }
+        public int Efx { get; set; }
+        public int Monitor { get; set; }
+        public int OnAir { get; set; }
+        public int MasterMute { get; set; }
+        public int MonoSw { get; set; }
+        /// <summary>是否已有有效数据(从未成功连接过则为 false)。</summary>
+        public bool HasData { get; set; }
+    }
+
+    // 会话存活期间的最新状态 + 断开前最后一次快照
+    private readonly SwitchStateSnapshot _lastSnapshot = new();
+
+    /// <summary>获取六个快速开关的当前已知状态(已连接=实时;低占用空闲=断开前最后状态)。</summary>
+    public SwitchStateSnapshot GetSwitchStates()
+    {
+        lock (_sync)
+        {
+            var s = _session;
+            if (s != null && IsConnected)
+            {
+                return new SwitchStateSnapshot
+                {
+                    Phantom48V = s.Global.Phantom48V,
+                    Efx = s.Global.Efx,
+                    Monitor = s.Global.Monitor,
+                    OnAir = s.Global.OnAir,
+                    MasterMute = s.Global.MasterMute,
+                    MonoSw = s.Preset.MonoSw,
+                    HasData = true,
+                };
+            }
+            return new SwitchStateSnapshot
+            {
+                Phantom48V = _lastSnapshot.Phantom48V,
+                Efx = _lastSnapshot.Efx,
+                Monitor = _lastSnapshot.Monitor,
+                OnAir = _lastSnapshot.OnAir,
+                MasterMute = _lastSnapshot.MasterMute,
+                MonoSw = _lastSnapshot.MonoSw,
+                HasData = _lastSnapshot.HasData,
+            };
+        }
+    }
+
+    /// <summary>断开前把会话状态快照到 _lastSnapshot,供低占用模式菜单回显。</summary>
+    private void CaptureLastSnapshot()
+    {
+        var s = _session;
+        if (s == null) return;
+        lock (_sync)
+        {
+            _lastSnapshot.Phantom48V = s.Global.Phantom48V;
+            _lastSnapshot.Efx = s.Global.Efx;
+            _lastSnapshot.Monitor = s.Global.Monitor;
+            _lastSnapshot.OnAir = s.Global.OnAir;
+            _lastSnapshot.MasterMute = s.Global.MasterMute;
+            _lastSnapshot.MonoSw = s.Preset.MonoSw;
+            _lastSnapshot.HasData = true;
+        }
+    }
+
     /// <summary>Panel 是否打开(打开时禁止低占用模式空闲断开)。</summary>
     public volatile bool PanelOpen;
 
@@ -252,6 +317,7 @@ public sealed class DeviceCoordinator
         _session = null;
         if (s != null)
         {
+            CaptureLastSnapshot();
             try { s.MetersReceived -= OnMeters; s.MessageReceived -= OnDeviceMessage; s.RawFrame -= OnRawFrame; }
             catch { }
             try { s.Dispose(); } catch { }
