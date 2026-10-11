@@ -12,6 +12,17 @@ public partial class App : Application
 
     private void OnStartup(object sender, StartupEventArgs e)
     {
+        // 全局异常记录:崩溃时留日志到 %AppData%\SonicCubePanel\panel_crash.log,便于定位。
+        DispatcherUnhandledException += (_, args) =>
+        {
+            LogCrash("Dispatcher", args.Exception);
+            args.Handled = true; // 尽量拦截,避免直接退出
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+            LogCrash("AppDomain", args.ExceptionObject as Exception);
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+            LogCrash("Task", args.Exception);
+
         _mutex = new Mutex(initiallyOwned: true, MutexName, out bool createdNew);
         if (!createdNew)
         {
@@ -48,6 +59,18 @@ public partial class App : Application
                     break;
                 }
             }
+        }
+        catch { }
+    }
+
+    private static void LogCrash(string source, Exception? ex)
+    {
+        try
+        {
+            var dir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SonicCubePanel");
+            System.IO.Directory.CreateDirectory(dir);
+            System.IO.File.AppendAllText(System.IO.Path.Combine(dir, "panel_crash.log"),
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {source}: {ex}\n\n");
         }
         catch { }
     }

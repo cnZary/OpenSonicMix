@@ -124,6 +124,67 @@
     </Setter>
   </Style>
 
+  <!-- 设置窗用 CheckBox/RadioButton:无动画简单模板,避免 Fluent Storyboard 动画 Background 崩溃 -->
+  <Style x:Key="PlainCheck" TargetType="CheckBox">
+    <Setter Property="Foreground" Value="{StaticResource BrushText}"/>
+    <Setter Property="FontSize" Value="12"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="CheckBox">
+          <StackPanel Orientation="Horizontal">
+            <Border x:Name="box" Width="16" Height="16" CornerRadius="3"
+                    Background="{StaticResource BrushControl}" BorderBrush="{StaticResource BrushBorderLight}" BorderThickness="1"
+                    VerticalAlignment="Center">
+              <Path x:Name="tick" Data="M2,8 L6,12 L13,3" Stroke="{StaticResource BrushAccent}" StrokeThickness="2"
+                    Visibility="Collapsed"/>
+            </Border>
+            <ContentPresenter Margin="8,0,0,0" VerticalAlignment="Center"/>
+          </StackPanel>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsChecked" Value="True">
+              <Setter TargetName="tick" Property="Visibility" Value="Visible"/>
+            </Trigger>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="box" Property="Background" Value="{StaticResource BrushControlHover}"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Foreground" Value="{StaticResource BrushTextDisabled}"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+  <Style x:Key="PlainRadio" TargetType="RadioButton">
+    <Setter Property="Foreground" Value="{StaticResource BrushText}"/>
+    <Setter Property="FontSize" Value="12"/>
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="RadioButton">
+          <StackPanel Orientation="Horizontal">
+            <Border x:Name="ring" Width="16" Height="16" CornerRadius="8"
+                    Background="{StaticResource BrushControl}" BorderBrush="{StaticResource BrushBorderLight}" BorderThickness="1"
+                    VerticalAlignment="Center">
+              <Ellipse x:Name="dot" Width="8" Height="8" Fill="{StaticResource BrushAccent}" Visibility="Collapsed"/>
+            </Border>
+            <ContentPresenter Margin="8,0,0,0" VerticalAlignment="Center"/>
+          </StackPanel>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsChecked" Value="True">
+              <Setter TargetName="dot" Property="Visibility" Value="Visible"/>
+            </Trigger>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="ring" Property="Background" Value="{StaticResource BrushControlHover}"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+              <Setter Property="Foreground" Value="{StaticResource BrushTextDisabled}"/>
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
   <!-- 次要操作按钮(重置/菜单) -->
   <Style x:Key="SubtleButton" TargetType="Button">
     <Setter Property="Height" Value="{StaticResource ControlHeight}"/>

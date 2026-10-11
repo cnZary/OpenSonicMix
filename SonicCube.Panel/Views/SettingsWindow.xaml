@@ -14,35 +14,35 @@
             <TextBlock x:Name="LLanguage" Style="{StaticResource LabelText}" TextAlignment="Left" VerticalAlignment="Center"/>
             <ComboBox x:Name="Lang" Grid.Column="1" Height="26"/>
           </Grid>
-          <CheckBox x:Name="StartWithWindows" Foreground="{StaticResource BrushText}" Margin="0,6,0,2"/>
+          <CheckBox x:Name="StartWithWindows" Style="{StaticResource PlainCheck}" Margin="0,6,0,2"/>
         </StackPanel>
       </GroupBox>
 
       <GroupBox x:Name="GConn" Header="Connection" Foreground="{StaticResource BrushText}" Margin="0,0,0,10">
         <StackPanel Margin="8">
           <TextBlock x:Name="LMidiWorkMode" Style="{StaticResource LabelText}" TextAlignment="Left"/>
-          <RadioButton x:Name="ModeLow" Foreground="{StaticResource BrushText}" Margin="0,6,0,2" GroupName="mode"/>
-          <RadioButton x:Name="ModeFast" Foreground="{StaticResource BrushText}" Margin="0,2" GroupName="mode"/>
+          <RadioButton x:Name="ModeLow" Style="{StaticResource PlainRadio}" Margin="0,6,0,2" GroupName="mode"/>
+          <RadioButton x:Name="ModeFast" Style="{StaticResource PlainRadio}" Margin="0,2" GroupName="mode"/>
         </StackPanel>
       </GroupBox>
 
       <GroupBox x:Name="GStartup" Header="Startup Behavior" Foreground="{StaticResource BrushText}" Margin="0,0,0,10">
         <StackPanel Margin="8">
-          <CheckBox x:Name="Enable48V" Foreground="{StaticResource BrushText}" Margin="0,4"/>
-          <CheckBox x:Name="EnableEFX" Foreground="{StaticResource BrushText}" Margin="0,4"/>
+          <CheckBox x:Name="Enable48V" Style="{StaticResource PlainCheck}" Margin="0,4"/>
+          <CheckBox x:Name="EnableEFX" Style="{StaticResource PlainCheck}" Margin="0,4"/>
         </StackPanel>
       </GroupBox>
 
       <GroupBox x:Name="GReconnect" Header="Device Reconnection" Foreground="{StaticResource BrushText}" Margin="0,0,0,10">
         <StackPanel Margin="8">
-          <CheckBox x:Name="Reapply" Foreground="{StaticResource BrushText}" Margin="0,4"/>
+          <CheckBox x:Name="Reapply" Style="{StaticResource PlainCheck}" Margin="0,4"/>
           <TextBlock x:Name="ReapplyHint" Style="{StaticResource LabelText}" TextAlignment="Left" Margin="18,0,0,2"/>
         </StackPanel>
       </GroupBox>
 
       <GroupBox x:Name="GOther" Header="Other" Foreground="{StaticResource BrushText}" Margin="0,0,0,10">
         <StackPanel Margin="8">
-          <CheckBox x:Name="AlwaysOnTop" Foreground="{StaticResource BrushText}" Margin="0,4"/>
+          <CheckBox x:Name="AlwaysOnTop" Style="{StaticResource PlainCheck}" Margin="0,4"/>
           <Grid Margin="0,4">
             <Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
             <TextBlock x:Name="LLogDir" Style="{StaticResource LabelText}" TextAlignment="Left" VerticalAlignment="Center"/>
