@@ -12,12 +12,14 @@ public static class IpcFraming
 {
     public const int MaxMessageBytes = 64 * 1024;
 
+    private static readonly byte[] Newline = "\n"u8.ToArray();
+
     /// <summary>异步写一行 JSON(调用方需自行串行化写入)。</summary>
     public static async Task WriteAsync(PipeStream stream, IpcMessage msg, CancellationToken ct)
     {
-        var json = JsonSerializer.Serialize(msg, IpcJsonContext.Default.IpcMessage);
-        var bytes = Encoding.UTF8.GetBytes(json + "\n");
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(msg, IpcJsonContext.Default.IpcMessage);
         await stream.WriteAsync(bytes, ct).ConfigureAwait(false);
+        await stream.WriteAsync(Newline, ct).ConfigureAwait(false);
         await stream.FlushAsync(ct).ConfigureAwait(false);
     }
 

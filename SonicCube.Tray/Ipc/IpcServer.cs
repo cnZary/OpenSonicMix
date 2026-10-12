@@ -306,6 +306,8 @@ public sealed class IpcServer
 
     private void OnDeviceMessage(uint cmdAddr, byte[] data)
     {
+        // 电平包已由 Meters 通道单独推送,跳过快照广播,避免 25fps 下重复构建全量 DTO。
+        if (CommandAddress.TypeOf(cmdAddr) == CommandAddress.PickOut) return;
         Interlocked.Increment(ref _stateVersion);
         if (!_clientSubscribed) return;
         // 对订阅端广播整包/单项状态变化。为控制频率,仅转发并附带版本号。
@@ -330,6 +332,7 @@ public sealed class IpcServer
 
     private async Task FlushMetersAsync()
     {
+        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(40)); // ~25 FPS
         try
         {
             while (true)
@@ -338,7 +341,7 @@ public sealed class IpcServer
                 _pendingMeters = null;
                 if (m == null) break;
                 Broadcast(new IpcMessage { Type = IpcMessageType.MeterUpdate, Meters = m });
-                await Task.Delay(40).ConfigureAwait(false); // ~25 FPS
+                await timer.WaitForNextTickAsync().ConfigureAwait(false);
             }
         }
         finally
