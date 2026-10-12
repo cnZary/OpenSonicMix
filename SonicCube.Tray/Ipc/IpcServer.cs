@@ -388,10 +388,8 @@ public sealed class IpcServer
         PipeConnection? c;
         lock (_sync) c = _client;
         if (c == null || !c.IsConnected) return;
-        _ = Task.Run(async () =>
-        {
-            try { await c.SendAsync(msg); } catch { /* 客户端断开 */ }
-        });
+        // 同步入队到写泵:零分配、且与请求/响应共用同一队列,保证严格按入队顺序写出。
+        c.Post(msg);
     }
 
     private static async Task ReplyAsync(PipeConnection conn, string? requestId, bool success, string? errCode = null, string? errDetail = null)

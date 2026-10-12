@@ -56,6 +56,21 @@ public sealed class LinearFaderControl : FrameworkElement
     private double TrackTop => 4;
     private double TrackHeight => Math.Max(10, ActualHeight - 8);
 
+    // ── 画笔/画刷缓存 ──
+    private Brush? _panelDeep, _control, _accent;
+    private Pen? _thumbPen, _accentPen;
+
+    private void EnsureResources()
+    {
+        if (_thumbPen is not null) return;
+        _panelDeep = (Brush)FindResource("BrushPanelDeep");
+        _control = (Brush)FindResource("BrushControl");
+        _accent = (Brush)FindResource("BrushAccent");
+        _thumbPen = new Pen((Brush)FindResource("BrushBorderLight"), 1);
+        _accentPen = new Pen(_accent, 2);
+        _thumbPen.Freeze(); _accentPen.Freeze();
+    }
+
     private double YToValue(double y)
     {
         double t = 1 - (y - TrackTop) / TrackHeight;
@@ -133,12 +148,13 @@ public sealed class LinearFaderControl : FrameworkElement
     {
         double w = ActualWidth, h = ActualHeight;
         if (w < 4 || h < 4) return;
+        EnsureResources();
         double cx = w / 2;
-        dc.DrawRectangle((Brush)FindResource("BrushPanelDeep"), null, new Rect(cx - 2, TrackTop, 4, TrackHeight));
+        dc.DrawRectangle(_panelDeep, null, new Rect(cx - 2, TrackTop, 4, TrackHeight));
         double y = ValueToY(Value);
         var thumb = new Rect(cx - 13, y - 6, 26, 12);
-        dc.DrawRoundedRectangle((Brush)FindResource("BrushControl"), new Pen((Brush)FindResource("BrushBorderLight"), 1), thumb, 2, 2);
-        dc.DrawLine(new Pen((Brush)FindResource("BrushAccent"), 2), new Point(cx - 9, y), new Point(cx + 9, y));
+        dc.DrawRoundedRectangle(_control, _thumbPen, thumb, 2, 2);
+        dc.DrawLine(_accentPen, new Point(cx - 9, y), new Point(cx + 9, y));
         AutomationProperties.SetName(this, "Level");
     }
 }

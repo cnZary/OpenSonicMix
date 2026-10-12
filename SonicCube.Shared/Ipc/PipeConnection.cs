@@ -56,16 +56,18 @@ public static class IpcFraming
 }
 
 /// <summary>
-/// 通用管道连接封装:异步读循环 + 写入锁 + 消息分发。
+/// 通用管道连接封装:异步读循环 + 队列化写泵(保序) + 消息分发。
 /// Tray(Server)与 Panel(Client)共用。
 /// </summary>
 public sealed class PipeConnection : IDisposable
 {
     private readonly PipeStream _stream;
-    private readonly SemaphoreSlim _writeLock = new(1, 1);
+    private readonly System.Threading.Channels.Channel<(IpcMessage Msg, TaskCompletionSource? Tcs)> _writeQueue =
+        System.Threading.Channels.Channel.CreateUnbounded<(IpcMessage, TaskCompletionSource?)>();
     private readonly byte[] _buf = new byte[IpcFraming.MaxMessageBytes + 1];
     private int _len;
     private CancellationTokenSource? _readCts;
+    private CancellationTokenSource? _writeCts;
 
     public event Action<IpcMessage>? MessageReceived;
     public event Action? Disconnected;
@@ -75,23 +77,49 @@ public sealed class PipeConnection : IDisposable
 
     public PipeConnection(PipeStream stream) => _stream = stream;
 
-    public async Task SendAsync(IpcMessage msg, CancellationToken ct = default)
+    /// <summary>入队发送(单写泵串行化,保证消息按入队顺序写出)。</summary>
+    public Task SendAsync(IpcMessage msg, CancellationToken ct = default)
     {
-        await _writeLock.WaitAsync(ct).ConfigureAwait(false);
-        try
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_writeQueue.Writer.TryWrite((msg, tcs)))
         {
-            await IpcFraming.WriteAsync(_stream, msg, ct).ConfigureAwait(false);
+            tcs.TrySetException(new InvalidOperationException("写泵已停止"));
+            return tcs.Task;
         }
-        finally
-        {
-            _writeLock.Release();
-        }
+        if (ct.CanBeCanceled) ct.Register(() => tcs.TrySetCanceled(ct));
+        return tcs.Task;
     }
+
+    /// <summary>尽力入队,不等待完成(用于高频广播,调用方不关心结果)。</summary>
+    public void Post(IpcMessage msg) => _writeQueue.Writer.TryWrite((msg, null));
 
     public void StartReadLoop()
     {
         _readCts = new CancellationTokenSource();
+        _writeCts = new CancellationTokenSource();
         _ = Task.Run(() => ReadLoopAsync(_readCts.Token));
+        _ = Task.Run(() => WriteLoopAsync(_writeCts.Token));
+    }
+
+    private async Task WriteLoopAsync(CancellationToken ct)
+    {
+        try
+        {
+            await foreach (var (msg, tcs) in _writeQueue.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+            {
+                try
+                {
+                    await IpcFraming.WriteAsync(_stream, msg, ct).ConfigureAwait(false);
+                    tcs?.TrySetResult();
+                }
+                catch (Exception ex)
+                {
+                    tcs?.TrySetException(ex);
+                    if (ex is IOException or OperationCanceledException) break; // 连接断开,停泵
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
     }
 
     private async Task ReadLoopAsync(CancellationToken ct)
@@ -127,7 +155,8 @@ public sealed class PipeConnection : IDisposable
     public void Dispose()
     {
         _readCts?.Cancel();
+        _writeCts?.Cancel();
+        _writeQueue.Writer.TryComplete();
         try { _stream.Dispose(); } catch { }
-        _writeLock.Dispose();
     }
 }

@@ -54,6 +54,22 @@ public sealed class PanSliderControl : FrameworkElement
         return Math.Round(t * 100 - 50);
     }
 
+    // ── 画笔/画刷缓存 ──
+    private Pen? _trackPen, _midPen, _thumbPen;
+    private Brush? _brushBorderLight, _brushAccent, _brushOff;
+
+    private void EnsureResources()
+    {
+        if (_trackPen is not null) return;
+        _brushBorderLight = (Brush)FindResource("BrushBorderLight");
+        _brushAccent = (Brush)FindResource("BrushAccent");
+        _brushOff = (Brush)FindResource("BrushOff");
+        _trackPen = new Pen(_brushBorderLight, 2);
+        _midPen = new Pen((Brush)FindResource("BrushBorder"), 1);
+        _thumbPen = new Pen(_brushBorderLight, 1);
+        _trackPen.Freeze(); _midPen.Freeze(); _thumbPen.Freeze();
+    }
+
     private double ValueToX(double v) => 8 + (v + 50) / 100.0 * (ActualWidth - 16);
 
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
@@ -136,16 +152,16 @@ public sealed class PanSliderControl : FrameworkElement
     {
         double w = ActualWidth, h = ActualHeight;
         if (w < 4 || h < 4) return;
+        EnsureResources();
         double cy = h / 2 + 4;
 
-        var trackPen = new Pen((Brush)FindResource("BrushBorderLight"), 2);
-        dc.DrawLine(trackPen, new Point(8, cy), new Point(w - 8, cy));
+        dc.DrawLine(_trackPen, new Point(8, cy), new Point(w - 8, cy));
         // 中线
-        dc.DrawLine(new Pen((Brush)FindResource("BrushBorder"), 1), new Point(w / 2, cy - 5), new Point(w / 2, cy + 5));
+        dc.DrawLine(_midPen, new Point(w / 2, cy - 5), new Point(w / 2, cy + 5));
 
         double x = ValueToX(Value);
-        var thumbBrush = IsEnabled ? (Brush)FindResource("BrushAccent") : (Brush)FindResource("BrushOff");
-        dc.DrawRoundedRectangle(thumbBrush, new Pen((Brush)FindResource("BrushBorderLight"), 1), new Rect(x - 6, cy - 8, 12, 16), 2, 2);
+        var thumbBrush = IsEnabled ? _brushAccent : _brushOff;
+        dc.DrawRoundedRectangle(thumbBrush, _thumbPen, new Rect(x - 6, cy - 8, 12, 16), 2, 2);
 
         // 顶部 L / 值 / R
         var brush = (Brush)FindResource(IsEnabled ? "BrushTextSecondary" : "BrushTextDisabled");

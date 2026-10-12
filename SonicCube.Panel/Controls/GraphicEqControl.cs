@@ -40,6 +40,29 @@ public sealed class GraphicEqControl : FrameworkElement
     private double PointX(int i) => ValueMapping.EqFreqToNorm(_freq[i]) * ActualWidth;
     private double PointY(int i) => ValueMapping.EqGainToNorm(_gain[i]) * ActualHeight;
 
+    // ── 画刷/画笔缓存(主题不变即复用,避免每帧 FindResource/new/未冻结) ──
+    private Brush? _panelDeep, _accent;
+    private Pen? _gridPen, _curvePen, _pointPen;
+    private Brush[]? _pointBrushes;
+
+    private void EnsureResources()
+    {
+        if (_pointBrushes is not null) return;
+        _panelDeep = (Brush)FindResource("BrushPanelDeep");
+        _accent = (Brush)FindResource("BrushAccent");
+        _gridPen = new Pen((Brush)FindResource("BrushBorder"), 1);
+        _curvePen = new Pen(_accent, 2);
+        _pointPen = new Pen(Brushes.White, 1.2);
+        _gridPen.Freeze(); _curvePen.Freeze(); _pointPen.Freeze();
+        _pointBrushes =
+        [
+            new SolidColorBrush((Color)FindResource("ColorOn")),
+            new SolidColorBrush((Color)FindResource("ColorWarn")),
+            new SolidColorBrush((Color)FindResource("ColorAccent")),
+        ];
+        foreach (var b in _pointBrushes) b.Freeze();
+    }
+
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonDown(e);
@@ -113,10 +136,11 @@ public sealed class GraphicEqControl : FrameworkElement
     {
         double w = ActualWidth, h = ActualHeight;
         if (w < 8 || h < 8) return;
-        dc.DrawRectangle((Brush)FindResource("BrushPanelDeep"), null, new Rect(0, 0, w, h));
+        EnsureResources();
+        dc.DrawRectangle(_panelDeep, null, new Rect(0, 0, w, h));
 
         // 网格
-        var gridPen = new Pen((Brush)FindResource("BrushBorder"), 1);
+        var gridPen = _gridPen!;
         foreach (double f in new[] { 100.0, 1000, 10000 })
         {
             double x = ValueMapping.EqFreqToNorm(f) * w;
@@ -125,7 +149,7 @@ public sealed class GraphicEqControl : FrameworkElement
         dc.DrawLine(gridPen, new Point(0, h / 2), new Point(w, h / 2));
 
         // 响应曲线(三段高斯叠加近似,仅视觉)
-        var curvePen = new Pen((Brush)FindResource("BrushAccent"), 2);
+        var curvePen = _curvePen!;
         Point prev = new(0, h / 2);
         for (double x = 0; x <= w; x += 3)
         {
@@ -143,11 +167,10 @@ public sealed class GraphicEqControl : FrameworkElement
         }
 
         // 拖拽点
-        var colors = new[] { (Color)FindResource("ColorOn"), (Color)FindResource("ColorWarn"), (Color)FindResource("ColorAccent") };
         for (int i = 0; i < 3; i++)
         {
             double x = PointX(i), y = PointY(i);
-            dc.DrawEllipse(new SolidColorBrush(colors[i]), new Pen(Brushes.White, 1.2), new Point(x, y), 7, 7);
+            dc.DrawEllipse(_pointBrushes![i], _pointPen, new Point(x, y), 7, 7);
             string txt = $"{FormatFreq(_freq[i])} {_gain[i]:+0;-0;0}dB" + (i == 1 ? $" Q{_q:0.##}" : "");
             DrawText(dc, txt, new Point(x, y - 20));
         }

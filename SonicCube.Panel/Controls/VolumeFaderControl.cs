@@ -223,6 +223,10 @@ public sealed class VolumeFaderControl : FrameworkElement
         s, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
         _typeface!, 8.5, brush, VisualTreeHelper.GetDpi(this).PixelsPerDip);
 
+    // 刻度为静态内容:启动时格式化一次,避免每帧 $"" 插值分配。
+    private static readonly double[] TickDbs = [10.0, 5, 0, -5, -10, -20, -30, -51];
+    private static readonly string[] TickLabels = TickDbs.Select(db => db > 0 ? $"+{db:0}" : $"{db:0}").ToArray();
+
     protected override void OnRender(DrawingContext dc)
     {
         double w = ActualWidth, h = ActualHeight;
@@ -232,13 +236,14 @@ public sealed class VolumeFaderControl : FrameworkElement
         double cx = w / 2 + 2;   // 轨道中心右移,左侧留出 dB 数字刻度
 
         // dB 数字刻度(左缘右对齐)+ 双侧刻度线;0dB 为物理参考点,数字提亮
-        foreach (double db in new[] { 10.0, 5, 0, -5, -10, -20, -30, -51 })
+        for (int i = 0; i < TickDbs.Length; i++)
         {
+            double db = TickDbs[i];
             double y = DbToY(db);
             double ys = Math.Round(y) + 0.5;
             dc.DrawLine(_tickPen, new Point(cx - 11, ys), new Point(cx - 4, ys));
             dc.DrawLine(_tickPen, new Point(cx + 4, ys), new Point(cx + 11, ys));
-            var t = Label(db > 0 ? $"+{db:0}" : $"{db:0}", db == 0 ? _textHi! : _text!);
+            var t = Label(TickLabels[i], db == 0 ? _textHi! : _text!);
             dc.DrawText(t, new Point(cx - 14 - t.Width, y - t.Height / 2));
         }
 

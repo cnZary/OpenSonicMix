@@ -65,6 +65,8 @@ public static class Logger
     /// <summary>记录 MIDI 帧(方向 + 原始字节)。</summary>
     public static void MidiFrame(bool tx, uint cmdAddr, ReadOnlySpan<byte> frame)
     {
+        // level 早退必须在格式化之前,避免 MinLevel>Debug 时白构建 hex/插值字符串。
+        if (LogLevel.Debug < MinLevel || !_running) return;
         Enqueue(LogLevel.Debug, "MIDI",
             $"{(tx ? "TX" : "RX")} addr=0x{cmdAddr:X8} {Convert.ToHexString(frame)}");
     }
@@ -72,6 +74,7 @@ public static class Logger
     /// <summary>高频电平日志(按 MeterFlushInterval 采样)。</summary>
     public static void Meter(ReadOnlySpan<float> meters)
     {
+        if (LogLevel.Debug < MinLevel || !_running) return;
         var now = DateTime.UtcNow;
         if (now - _lastMeterFlush < MeterFlushInterval) return;
         _lastMeterFlush = now;
