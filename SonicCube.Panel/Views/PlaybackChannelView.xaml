@@ -28,7 +28,7 @@
             <RowDefinition Height="*"/>
           </Grid.RowDefinitions>
           <ToggleButton x:Name="BtnMute" Grid.Row="0" Style="{StaticResource ChannelToggle}" Width="36" Margin="0,0,0,4"/>
-          <c:MeterBar x:Name="Meter" Grid.Row="1" Width="22" HorizontalAlignment="Center"/>
+          <c:MeterBar x:Name="Meter" Grid.Row="1" Width="34" HorizontalAlignment="Center"/>
         </Grid>
       </Grid>
 

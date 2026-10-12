@@ -12,7 +12,7 @@ namespace SonicCube.Panel.Controls;
 /// 快攻慢放 + 峰值保持:按实际经过时间计算,不按帧数。
 /// 所有实例统一由静态 CompositionTarget.Rendering 驱动(单一订阅,窗口关闭时解除)。
 /// 最小化/不可见时暂停绘制。
-/// 视觉:分段渐变电平条(绿→黄→红,分界处颜色连续)、右侧 dB 刻度线、双段式峰值保持线。
+/// 视觉:分段渐变电平条(绿→黄→红,分界处颜色连续)、右侧 dB 刻度尺(数字 + 刻度线)、双段式峰值保持线。
 /// 音频级渐变用 DrawingBrush 平铺实现,电平段区域无自身像素级采样,
 /// 触发不了 WPF 的可见性优化,而 DrawingBrush 分支已实测证明不会被该机制逐帧清空。
 /// </summary>
@@ -160,8 +160,9 @@ public sealed class MeterBar : FrameworkElement
     }
 
     // ── 画刷缓存(资源查找走 Application.Resources,固定引用,实例间共享)──
-    private Brush? _track, _trackBorder, _tick, _peakWhite, _peakWarn;
+    private Brush? _track, _trackBorder, _tick, _peakWhite, _peakWarn, _scaleText, _scaleTextHi;
     private Pen? _trackPen, _tickPen, _peakWhitePen, _peakWarnPen;
+    private Typeface? _typeface;
     private LinearGradientBrush? _fill;      // 电平条渐变(绿→黄→红,分界连续)
     private DrawingBrush? _segments;         // 分段横纹(平铺在电平条上)
 
@@ -173,11 +174,14 @@ public sealed class MeterBar : FrameworkElement
         _tick = (Brush)FindResource("BrushTickMajor");
         _peakWhite = (Brush)FindResource("BrushThumbLine");
         _peakWarn = (Brush)FindResource("BrushWarn");
+        _scaleText = (Brush)FindResource("BrushTextDisabled");
+        _scaleTextHi = (Brush)FindResource("BrushTextSecondary");
         _trackPen = new Pen(_trackBorder, 1);
         _tickPen = new Pen(_tick, 1);
         _peakWhitePen = new Pen(_peakWhite, 1);
         _peakWarnPen = new Pen(_peakWarn, 1);
         _trackPen.Freeze(); _tickPen.Freeze(); _peakWhitePen.Freeze(); _peakWarnPen.Freeze();
+        _typeface = new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Regular, FontStretches.Normal);
 
         // 电平条渐变:坐标映射到整根轨道(0=底/-60dB,1=顶/0dB)。
         // 分界 -12/-3dB 用成对 GradientStop 让颜色连续过渡,消除旧版纯色分段的硬边界;
@@ -224,37 +228,51 @@ public sealed class MeterBar : FrameworkElement
 
     private static GuidelineSet VerticalGuidelines(params double[] xs) => new(xs, null);
 
+    // 刻度为静态内容:启动时格式化一次,避免每帧 $"" 插值分配(同 VolumeFaderControl)。
+    private static readonly double[] ScaleDbs = [0.0, -3, -12, -20, -40, -60];
+    private static readonly string[] ScaleLabels = ScaleDbs.Select(db => $"{db:0}").ToArray();
+
+    private FormattedText ScaleLabel(int i, Brush brush) => new(
+        ScaleLabels[i], System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+        _typeface!, 7.5, brush, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+
     protected override void OnRender(DrawingContext dc)
     {
         double w = ActualWidth, h = ActualHeight;
         if (w < 10 || h < 10) return;
         EnsureBrushes();
 
-        // 布局:[ 电平条 L/R | 刻度区 ]
-        // 刻度线贴电平条右缘向左画,dB 数字由通道条在表底另行呈现,此处不再放文字。
-        const double scaleW = 7;
+        // 布局:[ 电平条 L/R | 刻度区(刻度线 + dB 数字) ]
+        // 数字贴刻度线右侧、按刻度 y 垂直居中;轨道上下留出半个字高,端点 0/-60 不再外溢。
+        const double scaleW = 20;
         double barsW = Math.Max(4, w - scaleW);
         const double gap = 2;
         double barW = (barsW - gap) / 2;
-        var track = new Rect(0, 0, barsW, h);
+        double pad = ScaleLabel(0, _scaleText!).Height / 2;
+        double yTop = pad, trackH = Math.Max(4, h - pad * 2);
+        var track = new Rect(0, yTop, barsW, trackH);
         dc.PushGuidelineSet(VerticalGuidelines(0, barW, barW + gap, barsW, w));
 
         // 轨道(深色槽 + 细边框)
         dc.DrawRectangle(_track, _trackPen, track);
 
-        // dB 刻度:0 与 -60 长(4px),其余 3px;-3/-12 即黄/红分界,读取阈值时与颜色呼应
-        foreach (double db in new[] { 0.0, -3, -12, -20, -40, -60 })
+        // dB 刻度:数字右对齐于刻度区;-3/-12 即黄/红分界,数字提亮呼应颜色阈值
+        for (int i = 0; i < ScaleDbs.Length; i++)
         {
-            double y = Math.Round(h * (1 - DbToNorm(db))) + 0.5;
-            double len = db is 0.0 or -60 ? 4 : 3;
-            dc.DrawLine(_tickPen, new Point(w - len, y), new Point(w, y));
+            double db = ScaleDbs[i];
+            double y = yTop + trackH * (1 - DbToNorm(db));
+            double ys = Math.Round(y) + 0.5;
+            dc.DrawLine(_tickPen, new Point(barsW, ys), new Point(barsW + 3, ys));
+            bool hi = db is 0.0 or -3 or -12;
+            var t = ScaleLabel(i, hi ? _scaleTextHi! : _scaleText!);
+            dc.DrawText(t, new Point(w - t.Width, y - t.Height / 2));
         }
 
         for (int i = 0; i < 2; i++)
         {
-            var bar = new Rect(i * (barW + gap), 0, barW, h);
-            DrawLevel(dc, bar, _display[i], h);
-            DrawPeak(dc, bar, _peak[i], h);
+            var bar = new Rect(i * (barW + gap), yTop, barW, trackH);
+            DrawLevel(dc, bar, _display[i], trackH);
+            DrawPeak(dc, bar, _peak[i], trackH);
         }
         dc.Pop();
 

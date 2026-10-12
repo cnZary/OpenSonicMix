@@ -18,11 +18,11 @@
       <!-- Logo 区域:完全留空,不放图片/图标/文字,保持高度与位置 -->
       <Border Grid.Row="0"/>
 
-      <!-- 主输出电平(视觉中心,明显高于通道电平) -->
-      <c:MeterBar x:Name="Meter" Grid.Row="1" Width="44" HorizontalAlignment="Center" Margin="0,4"/>
+      <!-- 主输出电平(视觉中心,明显高于通道电平;右侧自带 dB 刻度尺) -->
+      <c:MeterBar x:Name="Meter" Grid.Row="1" Width="52" HorizontalAlignment="Center" Margin="0,4"/>
 
-      <!-- 刻度 -->
-      <TextBlock x:Name="Scale" Grid.Row="2" Style="{StaticResource LabelText}" Text="0  -12  -60"/>
+      <!-- 刻度行:电平表自带 dB 刻度,此处不再单独呈现 -->
+      <TextBlock x:Name="Scale" Grid.Row="2" Style="{StaticResource LabelText}" Text=""/>
 
       <!-- 左 / 右 -->
       <Grid Grid.Row="3" Margin="0,2,0,4">
