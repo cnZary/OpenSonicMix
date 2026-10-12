@@ -34,10 +34,18 @@
   <!-- 电平表槽背景(与面板底色区分,空电平也可见) -->
   <Color x:Key="ColorMeterTrack">#FF17171A</Color>
 
-  <!-- 电平表 -->
+  <!-- 电平表(低饱和度系,暗色主题不刺眼;绘制端提高亮度补亮) -->
   <Color x:Key="ColorMeterGreen">#FF3FBF6A</Color>
   <Color x:Key="ColorMeterYellow">#FFDFC33C</Color>
   <Color x:Key="ColorMeterRed">#FFE05252</Color>
+
+  <!-- 自绘控件辅助画刷(刻度/轨道/面/高光,克制的中性层级) -->
+  <Color x:Key="ColorTickMajor">#FF76767F</Color>
+  <Color x:Key="ColorFaderTrack">#FF46464E</Color>
+  <Color x:Key="ColorThumbTop">#FF494951</Color>
+  <Color x:Key="ColorThumbBottom">#FF35353B</Color>
+  <Color x:Key="ColorThumbBorder">#FF5C5C66</Color>
+  <Color x:Key="ColorThumbLine">#FFF2F2F5</Color>
 
   <SolidColorBrush x:Key="BrushWindow" Color="{StaticResource ColorWindow}"/>
   <SolidColorBrush x:Key="BrushPanel" Color="{StaticResource ColorPanel}"/>
@@ -58,6 +66,9 @@
   <SolidColorBrush x:Key="BrushWarn" Color="{StaticResource ColorWarn}"/>
   <SolidColorBrush x:Key="BrushError" Color="{StaticResource ColorError}"/>
   <SolidColorBrush x:Key="BrushMeterTrack" Color="{StaticResource ColorMeterTrack}"/>
+  <SolidColorBrush x:Key="BrushTickMajor" Color="{StaticResource ColorTickMajor}"/>
+  <SolidColorBrush x:Key="BrushFaderTrack" Color="{StaticResource ColorFaderTrack}"/>
+  <SolidColorBrush x:Key="BrushThumbLine" Color="{StaticResource ColorThumbLine}"/>
 
   <!-- 尺寸 / 圆角 / 间距 -->
   <sys:Double x:Key="RadiusSmall">3</sys:Double>

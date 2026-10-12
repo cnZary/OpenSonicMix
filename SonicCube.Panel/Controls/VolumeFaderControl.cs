@@ -8,15 +8,18 @@ namespace SonicCube.Panel.Controls;
 
 /// <summary>
 /// 音量推子(dB 分段线性映射)。协议 dB(-51~+10)经 ValueMapping 分段映射到等距行程;
-/// 拖动合并节流发送;双击复位 0;滚轮 ±1dB;右侧绘制分段刻度。
+/// 拖动合并节流发送;双击复位 0;滚轮 ±1dB。
+/// 视觉:左侧 dB 数字刻度(0 位高亮)、双缘刻度线、圆角轨道、三段式 thumb
+/// (双色填充 + 高光 + 亮色抓线,悬停/拖动提亮)。
 /// 数值文本由通道条在推子底部单独呈现(较低频率更新)。
 /// </summary>
 public sealed class VolumeFaderControl : FrameworkElement
 {
     public VolumeFaderControl()
     {
-        Width = 44;
+        Width = 48;
         SnapsToDevicePixels = true;
+        UseLayoutRounding = true;
     }
 
     public static readonly DependencyProperty DbProperty = DependencyProperty.Register(
@@ -127,6 +130,18 @@ public sealed class VolumeFaderControl : FrameworkElement
         e.Handled = true;
     }
 
+    protected override void OnMouseEnter(MouseEventArgs e)
+    {
+        base.OnMouseEnter(e);
+        InvalidateVisual();
+    }
+
+    protected override void OnMouseLeave(MouseEventArgs e)
+    {
+        base.OnMouseLeave(e);
+        InvalidateVisual();
+    }
+
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
@@ -180,29 +195,67 @@ public sealed class VolumeFaderControl : FrameworkElement
         ValueCommitted?.Invoke(_lastSentDb);
     }
 
+    // ── 画刷/文字资源缓存 ──
+    private Brush? _tick, _text, _textHi, _track, _thumbBorder, _thumbLine, _accent, _highlight;
+    private Pen? _tickPen, _thumbBorderPen, _thumbLinePen, _thumbLineAccentPen;
+    private Typeface? _typeface;
+
+    private void EnsureResources()
+    {
+        if (_thumbLine is not null) return;
+        _tick = (Brush)FindResource("BrushTickMajor");
+        _text = (Brush)FindResource("BrushTextDisabled");
+        _textHi = (Brush)FindResource("BrushTextSecondary");
+        _track = (Brush)FindResource("BrushFaderTrack");
+        _thumbBorder = (Brush)FindResource("BrushBorderLight");
+        _thumbLine = (Brush)FindResource("BrushThumbLine");
+        _accent = (Brush)FindResource("BrushAccent");
+        _highlight = (Brush)FindResource("BrushControlHover");
+        _tickPen = new Pen(_tick, 1);
+        _thumbBorderPen = new Pen(_thumbBorder, 1);
+        _thumbLinePen = new Pen(_thumbLine, 2);
+        _thumbLineAccentPen = new Pen(_accent, 2);
+        _tickPen.Freeze(); _thumbBorderPen.Freeze(); _thumbLinePen.Freeze(); _thumbLineAccentPen.Freeze();
+        _typeface = new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Regular, FontStretches.Normal);
+    }
+
+    private FormattedText Label(string s, Brush brush) => new(
+        s, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+        _typeface!, 8.5, brush, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+
     protected override void OnRender(DrawingContext dc)
     {
         double w = ActualWidth, h = ActualHeight;
-        if (w < 4 || h < 4) return;
-        double cx = w / 2;
+        if (w < 20 || h < 20) return;
+        EnsureResources();
+        bool active = _dragging || IsMouseOver;
+        double cx = w / 2 + 2;   // 轨道中心右移,左侧留出 dB 数字刻度
 
-        // 刻度(分段等距)
-        var tickPen = new Pen((Brush)FindResource("BrushBorderLight"), 1);
+        // dB 数字刻度(左缘右对齐)+ 双侧刻度线;0dB 为物理参考点,数字提亮
         foreach (double db in new[] { 10.0, 5, 0, -5, -10, -20, -30, -51 })
         {
             double y = DbToY(db);
-            dc.DrawLine(tickPen, new Point(cx - 10, y), new Point(cx - 4, y));
-            dc.DrawLine(tickPen, new Point(cx + 4, y), new Point(cx + 10, y));
+            double ys = Math.Round(y) + 0.5;
+            dc.DrawLine(_tickPen, new Point(cx - 11, ys), new Point(cx - 4, ys));
+            dc.DrawLine(_tickPen, new Point(cx + 4, ys), new Point(cx + 11, ys));
+            var t = Label(db > 0 ? $"+{db:0}" : $"{db:0}", db == 0 ? _textHi! : _text!);
+            dc.DrawText(t, new Point(cx - 14 - t.Width, y - t.Height / 2));
         }
-        // 轨道
-        dc.DrawRectangle((Brush)FindResource("BrushPanelDeep"), null,
-            new Rect(cx - 2, TrackTop, 4, TrackHeight));
 
-        // 滑块
+        // 轨道(圆角槽)
+        dc.DrawRoundedRectangle(_track, null, new Rect(cx - 2, TrackTop, 4, TrackHeight), 2, 2);
+
+        // Thumb:双色面 + 顶部高光 + 抓线(0dB 时抓线用强调色呼应刻度高亮)
         double thumbY = DbToY(Db);
         var thumb = new Rect(cx - 13, thumbY - 6, 26, 12);
-        dc.DrawRoundedRectangle((Brush)FindResource("BrushControl"), new Pen((Brush)FindResource("BrushBorderLight"), 1), thumb, 2, 2);
-        dc.DrawLine(new Pen((Brush)FindResource("BrushAccent"), 2), new Point(cx - 9, thumbY), new Point(cx + 9, thumbY));
+        var fill = new LinearGradientBrush(
+            (Color)FindResource("ColorThumbTop"), (Color)FindResource("ColorThumbBottom"), 90);
+        fill.Freeze();
+        dc.DrawRoundedRectangle(fill, _thumbBorderPen, thumb, 2, 2);
+        dc.DrawLine(new Pen(_highlight, 1), new Point(thumb.X + 2, thumb.Y + 1.5), new Point(thumb.Right - 2, thumb.Y + 1.5));
+        var gripPen = (Db == 0 || active) ? _thumbLineAccentPen : _thumbLinePen;
+        double gy = Math.Round(thumbY) + 0.5;
+        dc.DrawLine(gripPen, new Point(cx - 9, gy), new Point(cx + 9, gy));
 
         AutomationProperties.SetName(this, "Volume fader");
     }

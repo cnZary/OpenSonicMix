@@ -12,6 +12,9 @@ namespace SonicCube.Panel.Controls;
 /// 快攻慢放 + 峰值保持:按实际经过时间计算,不按帧数。
 /// 所有实例统一由静态 CompositionTarget.Rendering 驱动(单一订阅,窗口关闭时解除)。
 /// 最小化/不可见时暂停绘制。
+/// 视觉:分段渐变电平条(绿→黄→红,分界处颜色连续)、右侧 dB 刻度线、双段式峰值保持线。
+/// 音频级渐变用 DrawingBrush 平铺实现,电平段区域无自身像素级采样,
+/// 触发不了 WPF 的可见性优化,而 DrawingBrush 分支已实测证明不会被该机制逐帧清空。
 /// </summary>
 public sealed class MeterBar : FrameworkElement
 {
@@ -132,8 +135,6 @@ public sealed class MeterBar : FrameworkElement
     {
         bool changed = false;
         double cur = _display[ch];
-        double curDb = -60 + cur * 60;         // 0..1 → -60..0 dB
-        double targetDb = -60 + target * 60;
         double stepUp = AttackDbPerSec * dt / 60.0;
         double stepDown = ReleaseDbPerSec * dt / 60.0;
         double next;
@@ -158,42 +159,127 @@ public sealed class MeterBar : FrameworkElement
         return changed;
     }
 
+    // ── 画刷缓存(资源查找走 Application.Resources,固定引用,实例间共享)──
+    private Brush? _track, _trackBorder, _tick, _peakWhite, _peakWarn;
+    private Pen? _trackPen, _tickPen, _peakWhitePen, _peakWarnPen;
+    private LinearGradientBrush? _fill;      // 电平条渐变(绿→黄→红,分界连续)
+    private DrawingBrush? _segments;         // 分段横纹(平铺在电平条上)
+
+    private void EnsureBrushes()
+    {
+        if (_fill is not null) return;
+        _track = (Brush)FindResource("BrushMeterTrack");
+        _trackBorder = (Brush)FindResource("BrushBorder");
+        _tick = (Brush)FindResource("BrushTickMajor");
+        _peakWhite = (Brush)FindResource("BrushThumbLine");
+        _peakWarn = (Brush)FindResource("BrushWarn");
+        _trackPen = new Pen(_trackBorder, 1);
+        _tickPen = new Pen(_tick, 1);
+        _peakWhitePen = new Pen(_peakWhite, 1);
+        _peakWarnPen = new Pen(_peakWarn, 1);
+        _trackPen.Freeze(); _tickPen.Freeze(); _peakWhitePen.Freeze(); _peakWarnPen.Freeze();
+
+        // 电平条渐变:坐标映射到整根轨道(0=底/-60dB,1=顶/0dB)。
+        // 分界 -12/-3dB 用成对 GradientStop 让颜色连续过渡,消除旧版纯色分段的硬边界;
+        // 亮度乘 1.2 抵消主题色的去饱和,恢复暗色主题下的鲜亮感。
+        var green = (Color)FindResource("ColorMeterGreen");
+        var yellow = (Color)FindResource("ColorMeterYellow");
+        var red = (Color)FindResource("ColorMeterRed");
+        const double yTop = 1 - 3.0 / 60;    // -3dB 归一
+        const double yMid = 1 - 12.0 / 60;   // -12dB 归一
+        var stops = new GradientStopCollection
+        {
+            new(Scale(green, 1.05), 0),
+            new(Scale(green, 1.1), yMid - 0.035),
+            new(Scale(yellow, 1.05), yMid + 0.035),
+            new(Scale(yellow, 1.1), yTop - 0.035),
+            new(Scale(red, 1.05), yTop + 0.035),
+            new(Scale(red, 1.25), 1),
+        };
+        _fill = new LinearGradientBrush(stops, new Point(0, 1), new Point(0, 0));
+        _fill.Freeze();
+
+        // 分段横纹:3px 着色 + 2px 留空,沿电平条平铺(坐标相对轨道全长)。
+        var seg = new GeometryDrawing
+        {
+            Geometry = new RectangleGeometry(new Rect(0, 3, 1, 2)),
+            Brush = _track,
+        };
+        seg.Freeze();
+        _segments = new DrawingBrush(seg)
+        {
+            TileMode = TileMode.Tile,
+            Viewport = new Rect(0, 0, 1, 5),
+            ViewportUnits = BrushMappingMode.Absolute,
+            Stretch = Stretch.Fill,
+        };
+        _segments.Freeze();
+    }
+
+    private static Color Scale(Color c, double f) =>
+        Color.FromArgb(c.A,
+            (byte)Math.Min(255, (int)(c.R * f + 0.5)),
+            (byte)Math.Min(255, (int)(c.G * f + 0.5)),
+            (byte)Math.Min(255, (int)(c.B * f + 0.5)));
+
+    private static GuidelineSet VerticalGuidelines(params double[] xs) => new(xs, null);
+
     protected override void OnRender(DrawingContext dc)
     {
         double w = ActualWidth, h = ActualHeight;
-        if (w < 4 || h < 4) return;
-        int bars = 2;
-        double gap = 2;
-        double barW = (w - gap * (bars - 1)) / bars;
-        for (int i = 0; i < bars; i++)
-            DrawBar(dc, new Rect(i * (barW + gap), 0, barW, h), _display[i], _peak[i]);
+        if (w < 10 || h < 10) return;
+        EnsureBrushes();
+
+        // 布局:[ 电平条 L/R | 刻度区 ]
+        // 刻度线贴电平条右缘向左画,dB 数字由通道条在表底另行呈现,此处不再放文字。
+        const double scaleW = 7;
+        double barsW = Math.Max(4, w - scaleW);
+        const double gap = 2;
+        double barW = (barsW - gap) / 2;
+        var track = new Rect(0, 0, barsW, h);
+        dc.PushGuidelineSet(VerticalGuidelines(0, barW, barW + gap, barsW, w));
+
+        // 轨道(深色槽 + 细边框)
+        dc.DrawRectangle(_track, _trackPen, track);
+
+        // dB 刻度:0 与 -60 长(4px),其余 3px;-3/-12 即黄/红分界,读取阈值时与颜色呼应
+        foreach (double db in new[] { 0.0, -3, -12, -20, -40, -60 })
+        {
+            double y = Math.Round(h * (1 - DbToNorm(db))) + 0.5;
+            double len = db is 0.0 or -60 ? 4 : 3;
+            dc.DrawLine(_tickPen, new Point(w - len, y), new Point(w, y));
+        }
+
+        for (int i = 0; i < 2; i++)
+        {
+            var bar = new Rect(i * (barW + gap), 0, barW, h);
+            DrawLevel(dc, bar, _display[i], h);
+            DrawPeak(dc, bar, _peak[i], h);
+        }
+        dc.Pop();
+
         AutomationProperties.SetName(this, "Level meter");
     }
 
-    private void DrawBar(DrawingContext dc, Rect r, double level, double peak)
+    private void DrawLevel(DrawingContext dc, Rect bar, double level, double h)
     {
-        // 背景(深色轨道 + 细边框,空电平时也清晰可见)
-        dc.DrawRectangle((Brush)FindResource("BrushMeterTrack"), new Pen((Brush)FindResource("BrushBorder"), 1), r);
-        var redBrush = new SolidColorBrush((Color)FindResource("ColorMeterRed"));
-        var yellowBrush = new SolidColorBrush((Color)FindResource("ColorMeterYellow"));
-        var green = (Brush)FindResource("BrushOn");
-        if (level > 0.001)
-        {
-            // 分段颜色:≤-12dB 绿,-12~-3 黄,>-3 红(分界相对满刻度)
-            double yTop = 1 - 3.0 / 60;      // -3dB 归一
-            double yMid = 1 - 12.0 / 60;     // -12dB 归一
-            double l = level;
-            dc.DrawRectangle(green, null, new Rect(r.X, r.Bottom - r.Height * Math.Min(l, yMid), r.Width, r.Height * Math.Min(l, yMid)));
-            if (l > yMid)
-                dc.DrawRectangle(yellowBrush, null, new Rect(r.X, r.Bottom - r.Height * Math.Min(l, yTop), r.Width, r.Height * (Math.Min(l, yTop) - yMid)));
-            if (l > yTop)
-                dc.DrawRectangle(redBrush, null, new Rect(r.X, r.Bottom - r.Height * l, r.Width, r.Height * (l - yTop)));
-        }
-        // 峰值线
-        if (peak > 0.001)
-        {
-            double py = r.Bottom - r.Height * peak;
-            dc.DrawLine(new Pen((Brush)FindResource("BrushWarn"), 1.5), new Point(r.X, py), new Point(r.Right, py));
-        }
+        if (level <= 0.001) return;
+        double fillH = Math.Round(h * level);
+        if (fillH < 1) return;
+
+        // 用 clip 限制在填充段区域,然后画全高渐变矩形,实现"取渐变当前段"
+        dc.PushClip(new RectangleGeometry(new Rect(bar.X, bar.Bottom - fillH, bar.Width, fillH)));
+        dc.DrawRectangle(_fill, null, new Rect(bar.X, 0, bar.Width, h));
+        dc.Pop();
+    }
+
+    private void DrawPeak(DrawingContext dc, Rect bar, double peak, double h)
+    {
+        if (peak <= 0.001) return;
+        double py = Math.Round(h * (1 - peak)) + 0.5;
+        var pen = peak >= 1 - 3.0 / 60 ? _peakWarnPen : _peakWhitePen;
+        // 双段式:比单像素线更醒目,宽度留出 1px 内缩
+        dc.DrawLine(pen, new Point(bar.X + 1, py - 1), new Point(bar.Right - 1, py - 1));
+        dc.DrawLine(pen, new Point(bar.X + 1, py + 1), new Point(bar.Right - 1, py + 1));
     }
 }
