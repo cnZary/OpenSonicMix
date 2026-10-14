@@ -10,6 +10,7 @@ namespace SonicCube.DeviceConsole;
 ///   enum            枚举 Sonic Cube II MIDI 输入/输出端口
 ///   status          打开端口、握手、读取 0x00000011 全局与 0x00000010 预设并打印
 ///   efx on|off      验证 EFX 开启/关闭并等待回包
+///   fx <module> on|off   验证效果模块使能(FXMODULEEN 0x00040010)写入,观察整图变化
 ///   p48 on|off      在显式安全确认后验证 48V(幻象电源,有损坏设备风险)
 ///   raw             打印原始收发帧(配合 status 流程)
 /// </summary>
@@ -31,6 +32,7 @@ internal static class Program
                 "enum" => EnumDevices(),
                 "status" => await StatusAsync(),
                 "efx" => await ToggleEfxAsync(argList),
+                "fx" => await SetFxModuleAsync(argList),
                 "p48" or "48v" => await Toggle48Async(argList),
                 "raw" => await RawStatusAsync(),
                 "toggle48_selftest" => SelfTest(),
@@ -57,8 +59,51 @@ internal static class Program
 
     private static int Usage()
     {
-        Console.WriteLine("用法: SonicCube.DeviceConsole <enum|status|efx on|off|p48 on|off|raw> [--raw]");
+        Console.WriteLine("用法: SonicCube.DeviceConsole <enum|status|efx on|off|fx <module> on|off|p48 on|off|raw> [--raw]");
         return 1;
+    }
+
+    // 诊断:向 FXMODULEEN 写入 (location=module, value=0/1),打印前后整图,观察设备是否按位置位/清位。
+    // 复现/证伪"EQ 与 COMP 联动、打不开/关不掉"的根因:若写入后整图中目标位未按预期翻转,
+    // 或该命令未收到回包超时,说明设备把 value 当作整图覆盖而非按位置位。
+    private static async Task<int> SetFxModuleAsync(List<string> args)
+    {
+        if (args.Count < 3) { Console.WriteLine("用法: fx <module 0..5> on|off"); return Usage(); }
+        if (!int.TryParse(args[1], out int module) || module < 0 || module > 5)
+        { Console.WriteLine("module 取 0..5(0=COMP 1=GRAPHEQ 2=INST 3=EQ 4=RVB 5=CAB)"); return Usage(); }
+        if (args[2] != "on" && args[2] != "off") return Usage();
+        int value = args[2] == "on" ? 1 : 0;
+
+        using var s = DeviceSession.OpenFirst();
+        Hook(s);
+        await s.HandshakeAsync();
+        int before = s.Preset.FxModuleEn;
+        Console.WriteLine($"写前 fxModuleEn=0b{Convert.ToString(before, 2).PadLeft(6, '0')} (bit{module}={((before >> module) & 1)})");
+
+        uint addr = CommandAddress.WithLocation(CommandAddress.FxModuleEnable, module);
+        Console.WriteLine($"写入: addr=0x{addr:X8} value={value} ...");
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            var resp = await s.SetIntAsync(addr, value);
+            sw.Stop();
+            Console.WriteLine($"回包({sw.ElapsedMilliseconds}ms): {Convert.ToHexString(resp)}");
+        }
+        catch (OperationCanceledException)
+        {
+            sw.Stop();
+            Console.WriteLine($"回包超时({sw.ElapsedMilliseconds}ms)! 设备未在 {s.ResponseTimeout.TotalMilliseconds}ms 内确认该地址。");
+        }
+        Console.WriteLine($"写后缓存 fxModuleEn=0b{Convert.ToString(s.Preset.FxModuleEn, 2).PadLeft(6, '0')} (bit{module}={((s.Preset.FxModuleEn >> module) & 1)})");
+        // 读回整包预设再确认一次设备真实状态
+        Console.WriteLine("读回整包预设核对...");
+        try
+        {
+            await s.RequestAsync(CommandAddress.Preset);
+            Console.WriteLine($"整包读回 fxModuleEn=0b{Convert.ToString(s.Preset.FxModuleEn, 2).PadLeft(6, '0')} (bit{module}={((s.Preset.FxModuleEn >> module) & 1)})");
+        }
+        catch (OperationCanceledException) { Console.WriteLine("整包读回超时。"); }
+        return 0;
     }
 
     private static int EnumDevices()

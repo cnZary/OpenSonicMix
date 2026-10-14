@@ -20,7 +20,8 @@ public static class CommandAddress
     public const uint HpfSwitch = 0x00020010;
     /// <summary>低切档位 ×2,int32(0=75Hz, 1=100Hz),location=通道 0/1。</summary>
     public const uint LowCut = 0x00030010;
-    /// <summary>效果模块使能位图,int32,bit0..5 = COMP,GRAPHEQ,INST,EQ,RVB,CAB。</summary>
+    /// <summary>效果模块使能位图,int32,bit0..5 = COMP,GRAPHEQ,INST,EQ,RVB,CAB。
+    /// 写入:location=模块号,value=0/1(按位置位/清位);确认回包载荷恒为 0,不含新位图。</summary>
     public const uint FxModuleEnable = 0x00040010;
     /// <summary>效果槽位 ×6,int32。</summary>
     public const uint FxSlot = 0x00050010;

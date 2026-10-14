@@ -66,7 +66,10 @@ public sealed class PresetState
             case Commands.CommandAddress.LowCut:
                 if (InRange(location, 2)) LowCut[location] = PayloadReadInt(data); break;
             case Commands.CommandAddress.FxModuleEnable:
-                if (data.Length >= 4) FxModuleEn = PayloadReadInt(data); break;
+                // 实测(2026-10,真机 fx 诊断):该地址写入的确认回包载荷恒为 0,不是新位图;
+                // 设备实际语义是按 location 置位/清位。位图由写入方合并(SetModuleEnabled)
+                // 与整包预设读回维护,此处绝不可用回包载荷整图覆盖(否则一次写入就清空所有模块开关)。
+                break;
             case Commands.CommandAddress.FxSlot:
                 if (InRange(location, ModuleCount)) FxSlot[location] = PayloadReadInt(data); break;
             case Commands.CommandAddress.FxAlgorithm:
@@ -109,6 +112,14 @@ public sealed class PresetState
 
     /// <summary>模块是否使能(bit)。</summary>
     public bool IsModuleEnabled(int module) => ((FxModuleEn >> module) & 1) == 1;
+
+    /// <summary>按写入值本地合并模块使能位(写入路径专用;设备语义 = 按 location 置位/清位)。</summary>
+    public void SetModuleEnabled(int module, bool enabled)
+    {
+        if ((uint)module >= (uint)ModuleCount) return;
+        if (enabled) FxModuleEn |= 1 << module;
+        else FxModuleEn &= ~(1 << module);
+    }
 
     private static bool InRange(int i, int n) => (uint)i < (uint)n;
 

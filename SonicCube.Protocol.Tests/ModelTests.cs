@@ -97,6 +97,28 @@ public sealed class ModelTests
     }
 
     [TestMethod]
+    public void Preset_ApplyIndividual_FxModuleEnable_EchoMustNotOverwriteBitmap()
+    {
+        // 真机实测:FXMODULEEN 写入的确认回包载荷恒为 0(非新位图)。
+        // 位图只能由写入方合并(SetModuleEnabled)或整包预设读回维护。
+        var s = new PresetState { FxModuleEn = 0b010010 };
+        s.ApplyIndividual(CommandAddress.FxModuleEnable, 3, Payload.Int32(0));
+        Assert.AreEqual(0b010010, s.FxModuleEn);
+    }
+
+    [TestMethod]
+    public void Preset_SetModuleEnabled_MergesSingleBit()
+    {
+        var s = new PresetState { FxModuleEn = 0b010010 };
+        s.SetModuleEnabled(3, true);
+        Assert.AreEqual(0b011010, s.FxModuleEn);
+        s.SetModuleEnabled(3, false);
+        Assert.AreEqual(0b010010, s.FxModuleEn);
+        s.SetModuleEnabled(6, true); // 越界:不变
+        Assert.AreEqual(0b010010, s.FxModuleEn);
+    }
+
+    [TestMethod]
     public void Global_Parse_8Bytes()
     {
         byte[] data = [1, 0, 1, 0, 1, 0, 1, 0];

@@ -338,6 +338,9 @@ public sealed class DeviceCoordinator
 
     private void OnDeviceMessage(uint cmdAddr, byte[] data)
     {
+        // FXMODULEEN 的写入确认回包不携带新位图(见 WriteFxModuleEnableAsync),转发出去只会让
+        // 订阅端收到一份合并前的旧位图(按钮闪回);合并后的位图由写入路径显式广播。
+        if (CommandAddress.TypeOf(cmdAddr) == CommandAddress.FxModuleEnable) return;
         DeviceMessage?.Invoke(cmdAddr, data);
     }
 
@@ -553,8 +556,42 @@ public sealed class DeviceCoordinator
         {
             var c = await EnsureConnectedInternalAsync(source, ct).ConfigureAwait(false);
             if (!c.Success) return c;
+            if (CommandAddress.TypeOf(fullAddress) == CommandAddress.FxModuleEnable)
+                return await WriteFxModuleEnableAsync(CommandAddress.LocationOf(fullAddress), value, ct).ConfigureAwait(false);
             return await WriteIntVerifiedAsync(fullAddress, value, ct).ConfigureAwait(false);
         }, TimeSpan.FromSeconds(15));
+
+    /// <summary>
+    /// FXMODULEEN 专用写入(真机实测):设备按 location 置位/清位,但确认回包载荷恒为 0、不含新位图。
+    /// 回包到达即视为写入成功,按写入值本地合并位图,并补一次广播
+    /// (回包自身触发的广播携带的是合并前的旧位图);超时时读回整包预设按目标位核实。
+    /// </summary>
+    private async Task<CommandResult> WriteFxModuleEnableAsync(int module, int value, CancellationToken ct)
+    {
+        var s = _session!;
+        if ((uint)module >= (uint)PresetState.ModuleCount)
+            return CommandResult.Fail("bad_param", $"模块号越界: {module}");
+        uint addr = CommandAddress.WithLocation(CommandAddress.FxModuleEnable, module);
+        try
+        {
+            await s.SetIntAsync(addr, value, ct).ConfigureAwait(false);
+            s.Preset.SetModuleEnabled(module, value != 0);
+            DeviceMessage?.Invoke(addr, []); // 让 IPC 端用合并后的位图重发快照
+            return CommandResult.Ok();
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            try { await s.RequestAsync(CommandAddress.Preset, ct).ConfigureAwait(false); }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                return CommandResult.Fail("timeout", "设备未确认写入且读回超时");
+            }
+            // 整包读回已刷新位图,按目标位核实
+            return s.Preset.IsModuleEnabled(module) == (value != 0)
+                ? CommandResult.Ok()
+                : CommandResult.Fail("timeout", "设备未确认写入");
+        }
+    }
 
     public Task<CommandResult> SetParameterFloatAsync(uint fullAddress, float value, ActionSource source) =>
         EnqueueAndWaitAsync(async ct =>
