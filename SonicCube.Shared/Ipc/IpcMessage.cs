@@ -82,6 +82,7 @@ public static class IpcMessageType
     public const string UpdateSettings = "update_settings";
     public const string SetParameter = "set_parameter";
     public const string ToggleSwitch = "toggle_switch";
+    public const string ResetModule = "reset_module";
     public const string SetWorkMode = "set_work_mode";
     public const string Subscribe = "subscribe";
     public const string Unsubscribe = "unsubscribe";

@@ -118,6 +118,9 @@ public sealed class TrayClient : IDisposable
     public Task<IpcMessage?> SetFxParamAsync(int module, int paramIndex, float value, CancellationToken ct = default) =>
         SendRequestAsync(new IpcMessage { Type = IpcMessageType.SetParameter, Module = module, ParamIndex = paramIndex, FloatValue = value }, ct);
 
+    public Task<IpcMessage?> ResetModuleAsync(int module, CancellationToken ct = default) =>
+        SendRequestAsync(new IpcMessage { Type = IpcMessageType.ResetModule, Module = module }, ct);
+
     /// <summary>直接拉取一次设备状态快照(不依赖订阅广播)。</summary>
     public async Task<DeviceStateDto?> GetStateDirectAsync(CancellationToken ct = default)
     {

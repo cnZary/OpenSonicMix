@@ -146,6 +146,9 @@ public sealed class IpcServer
             case IpcMessageType.SetParameter:
                 HandleSetParameter(conn, msg);
                 break;
+            case IpcMessageType.ResetModule:
+                HandleResetModule(conn, msg);
+                break;
             case IpcMessageType.SetWorkMode:
                 HandleSetWorkMode(conn, msg);
                 break;
@@ -201,6 +204,21 @@ public sealed class IpcServer
             ? WorkMode.FastConnection : WorkMode.LowResource;
         _modeManager.SetMode(mode);
         _ = ReplyAsync(conn, msg.RequestId, true);
+    }
+
+    private void HandleResetModule(PipeConnection conn, IpcMessage msg)
+    {
+        if (!msg.Module.HasValue)
+        {
+            _ = SendErrorAsync(conn, msg.RequestId, "bad_param", "缺少 module");
+            return;
+        }
+        _ = Task.Run(async () =>
+        {
+            var r = await _coordinator.ResetModuleAsync(msg.Module.Value, ActionSource.ManualPanel);
+            _modeManager.NotifyUserActivity();
+            await ReplyAsync(conn, msg.RequestId, r.Success, r.ErrorCode, r.ErrorDetail);
+        });
     }
 
     private void HandleUpdateSettings(PipeConnection conn, IpcMessage msg)

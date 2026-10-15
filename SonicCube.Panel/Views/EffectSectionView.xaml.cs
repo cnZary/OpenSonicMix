@@ -26,14 +26,14 @@ public partial class EffectSectionView : UserControl
     public event Action<int /*fxId*/>? CompAlg, InstAlg, EqAlg;
     public event Action<int, int, float>? FxParamRequested;
     public event Action<uint, int>? SetIntRequested;
-    public event Action? ResetRequested;
+    public event Action<int /*uiIndex*/>? ResetRequested;
 
     public EffectSectionView()
     {
         InitializeComponent();
         BuildTabs();
         BuildModuleList();
-        ResetBtn.Click += (_, _) => ResetRequested?.Invoke();
+        ResetBtn.Click += (_, _) => ResetRequested?.Invoke(_moduleUi);
         ApplyLocalization();
         Loc.LanguageChanged += ApplyLocalization;
         SelectPage(0);

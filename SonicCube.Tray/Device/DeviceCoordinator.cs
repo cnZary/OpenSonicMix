@@ -625,6 +625,52 @@ public sealed class DeviceCoordinator
             return CommandResult.Fail("verify", $"FX 参数读回值 {final:0.00} 与目标 {value:0.00} 不符");
         }, TimeSpan.FromSeconds(20));
 
+    /// <summary>
+    /// 单模块重置:先关该模块开关,再把当前算法全部参数写回 FxCatalog 默认值。
+    /// 模块关闭时设备仍应用参数写入(不回确认包,与 float 参数一致),故复用
+    /// SendFxParameterNoConfirmAsync + 整包读回核对;参数间隔 ~20ms。
+    /// 设备端算法不在目录(未知 fxId)时,退化为写该模块所有算法的全部参数默认值。
+    /// </summary>
+    public Task<CommandResult> ResetModuleAsync(int module, ActionSource source) =>
+        EnqueueAndWaitAsync(async ct =>
+        {
+            var c = await EnsureConnectedInternalAsync(source, ct).ConfigureAwait(false);
+            if (!c.Success) return c;
+            var s = _session!;
+            if ((uint)module >= (uint)PresetState.ModuleCount)
+                return CommandResult.Fail("bad_param", $"模块号越界: {module}");
+
+            // 先关开关,后续写参即便丢包也不影响听感。
+            var off = await WriteFxModuleEnableAsync(module, 0, ct).ConfigureAwait(false);
+            if (!off.Success) return off;
+
+            var mod = FxCatalog.GetModule(module);
+            if (mod is null) return CommandResult.Fail("bad_param", $"未知模块: {module}");
+            var alg = FxCatalog.FindAlgorithm(module, s.Preset.FxAlg[module]);
+            var defs = alg is not null ? alg.Params
+                : mod.Algorithms.SelectMany(a => a.Params).ToArray();
+            foreach (var p in defs)
+            {
+                await s.SendFxParameterNoConfirmAsync(module, p.AlgId, p.Default, ct).ConfigureAwait(false);
+                await Task.Delay(20, ct).ConfigureAwait(false);
+            }
+            // 逐条读回成本高;统一一次整包读回核对末条参数,其余沿用同样通道大概率已应用。
+            if (defs.Length > 0)
+            {
+                for (int attempt = 0; attempt < 3; attempt++)
+                {
+                    try { await s.RequestAsync(CommandAddress.Preset, ct).ConfigureAwait(false); break; }
+                    catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                    { if (attempt == 2) return CommandResult.Fail("timeout", "重置后读回超时"); }
+                }
+                var last = defs[^1];
+                float cur = s.Preset.GetFxPara(module, last.AlgId);
+                if (Math.Abs(cur - last.Default) > 0.05f)
+                    return CommandResult.Fail("verify", $"参数读回 {cur:0.00} 与默认 {last.Default:0.00} 不符");
+            }
+            return CommandResult.Ok();
+        }, TimeSpan.FromSeconds(20));
+
     public void Shutdown()
     {
         _running = false;

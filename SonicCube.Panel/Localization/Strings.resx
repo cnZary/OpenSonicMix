@@ -31,7 +31,7 @@
   <data name="Reverb" xml:space="preserve"><value>Reverb</value></data>
   <data name="Algorithm" xml:space="preserve"><value>Algorithm</value></data>
   <data name="Reset" xml:space="preserve"><value>Reset</value></data>
-  <data name="ResetConfirm" xml:space="preserve"><value>Reset the whole device preset to defaults?</value></data>
+  <data name="ResetModuleConfirm" xml:space="preserve"><value>Reset {0} to defaults and switch it off?</value></data>
   <data name="Hpf75" xml:space="preserve"><value>75 Hz</value></data>
   <data name="Hpf100" xml:space="preserve"><value>100 Hz</value></data>
   <data name="Mic1Eq" xml:space="preserve"><value>MIC1 EQ</value></data>

@@ -42,4 +42,8 @@ public static class Loc
 
     public static string Get(string key)
         => Rm.GetString(key, Culture) ?? key;
+
+    /// <summary>按当前文化格式化带占位符的资源串({0}…)。</summary>
+    public static string Format(string key, params object[] args)
+        => string.Format(Culture, Get(key), args);
 }

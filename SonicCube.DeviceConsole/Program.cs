@@ -33,6 +33,7 @@ internal static class Program
                 "status" => await StatusAsync(),
                 "efx" => await ToggleEfxAsync(argList),
                 "fx" => await SetFxModuleAsync(argList),
+                "fxp" => await SetFxParamAsync(argList),
                 "p48" or "48v" => await Toggle48Async(argList),
                 "raw" => await RawStatusAsync(),
                 "toggle48_selftest" => SelfTest(),
@@ -57,9 +58,48 @@ internal static class Program
         }
     }
 
+    // 诊断:直接向 FXPARA(0x00080010)写一个参数,观察模块关闭时设备是否仍接受并回包。
+    // 复现/证伪"关闭开关后能否复位参数":若写入超时或整包读回值未变,说明设备在模块关闭时忽略参数写入。
+    private static async Task<int> SetFxParamAsync(List<string> args)
+    {
+        if (args.Count < 4) { Console.WriteLine("用法: fxp <module> <paramIdx> <value>"); return Usage(); }
+        if (!int.TryParse(args[1], out int module) || module < 0 || module > 5) { Console.WriteLine("module 0..5"); return Usage(); }
+        if (!int.TryParse(args[2], out int idx)) { Console.WriteLine("paramIdx 整数"); return Usage(); }
+        if (!float.TryParse(args[3], System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out float value)) { Console.WriteLine("value 浮点"); return Usage(); }
+
+        using var s = DeviceSession.OpenFirst();
+        Hook(s);
+        await s.HandshakeAsync();
+        int flat = module * PresetState.ParamsPerModule + idx;
+        Console.WriteLine($"模块开关位图 fxModuleEn=0b{Convert.ToString(s.Preset.FxModuleEn, 2).PadLeft(6, '0')} (bit{module}={s.Preset.IsModuleEnabled(module)})");
+        Console.WriteLine($"写前 fxParaVal[{module},{idx}] = {s.Preset.FxParaVal[flat]}");
+        Console.WriteLine($"写入: module={module} idx={idx} value={value} ...");
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            var resp = await s.SetFxParameterAsync(module, idx, value);
+            sw.Stop();
+            Console.WriteLine($"回包({sw.ElapsedMilliseconds}ms): {Convert.ToHexString(resp)}");
+        }
+        catch (OperationCanceledException)
+        {
+            sw.Stop();
+            Console.WriteLine($"回包超时({sw.ElapsedMilliseconds}ms)!");
+        }
+        Console.WriteLine($"写后缓存 fxParaVal[{module},{idx}] = {s.Preset.FxParaVal[flat]}");
+        try
+        {
+            await s.RequestAsync(CommandAddress.Preset);
+            Console.WriteLine($"整包读回 fxParaVal[{module},{idx}] = {s.Preset.FxParaVal[flat]}");
+        }
+        catch (OperationCanceledException) { Console.WriteLine("整包读回超时。"); }
+        return 0;
+    }
+
     private static int Usage()
     {
-        Console.WriteLine("用法: SonicCube.DeviceConsole <enum|status|efx on|off|fx <module> on|off|p48 on|off|raw> [--raw]");
+        Console.WriteLine("用法: SonicCube.DeviceConsole <enum|status|efx on|off|fx <module> on|off|fxp <module> <paramIdx> <value>|p48 on|off|raw> [--raw]");
         return 1;
     }
 

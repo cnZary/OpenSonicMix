@@ -68,8 +68,7 @@ public partial class MainWindow : Window
         Fx.FxParamRequested += SendFxParam;
         Rvb.AlgorithmChangeRequested += fxId => SendInt(CommandAddress.WithLocation(CommandAddress.FxAlgorithm, FxCatalog.ModuleRvb), fxId);
         Rvb.FxParamRequested += SendFxParam;
-        Fx.ResetRequested += OnResetRequested;
-        // 通道按钮联动效果区页签
+        Fx.ResetRequested += OnResetRequested;        // 通道按钮联动效果区页签
         Mic1.ShowEffectRequested += i => Fx.ShowEffect(i);
         Line2.ShowEffectRequested += i => Fx.ShowEffect(i);
         // 底部菜单
@@ -282,15 +281,28 @@ public partial class MainWindow : Window
         catch { }
     }
 
-    // ── 重置(整台设备,需确认)────────────────────────────────
+    // ── 重置(当前选中模块,需确认)────────────────────────────
 
-    private void OnResetRequested()
+    private void OnResetRequested(int uiIndex)
     {
         if (_simulate) return;
-        var r = MessageBox.Show(this, Loc.Get("ResetConfirm"), Loc.Get("Reset"),
+        // uiIndex → (module, 本地化名称键):0=COMP 1=MIC1 EQ 3=INST 4=CH2 EQ;2/5=HPF
+        int module = uiIndex switch { 0 => 0, 1 => 1, 3 => 2, 4 => 3, _ => -1 };
+        string nameKey = uiIndex switch { 0 => "Comp", 1 => "Eq", 3 => "Inst", 4 => "Eq", _ => "Hpf" };
+        var r = MessageBox.Show(this, Loc.Format("ResetModuleConfirm", Loc.Get(nameKey)), Loc.Get("Reset"),
             MessageBoxButton.OKCancel, MessageBoxImage.Warning);
         if (r != MessageBoxResult.OK) return;
-        _ = SendSafe(() => _client!.SetIntAsync(CommandAddress.CommandReset, 0));
+        if (module >= 0)
+        {
+            _ = SendSafe(() => _client!.ResetModuleAsync(module));
+        }
+        else
+        {
+            // HPF 页:无算法参数;重置 = 关该通道 HpfSwitch + LowCut 回 75Hz。
+            int ch = uiIndex == 2 ? 0 : 1;
+            SendInt(CommandAddress.WithLocation(CommandAddress.HpfSwitch, ch), 0);
+            SendInt(CommandAddress.WithLocation(CommandAddress.LowCut, ch), 0);
+        }
     }
 
     // ── 设置 ────────────────────────────────────────────────
