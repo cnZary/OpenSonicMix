@@ -22,6 +22,7 @@ public partial class MainWindow : Window
     private GlobalState _global = new();
     private long _stateVersion;
     private bool _synced;
+    private bool _closing;
 
     private InputChannelView Mic1 = null!;
     private InputChannelView Line2 = null!;
@@ -117,7 +118,13 @@ public partial class MainWindow : Window
         _client.MetersUpdated += m => ApplyMeters(m);
         _client.ConnectionChanged += conn => RunOnUi(() => UpdateStatus(conn));
         _client.SettingsUpdated += s => RunOnUi(() => ApplySettings(s));
-        _client.TrayDisconnected += () => RunOnUi(() => { UpdateStatus(false); BottomBar.SetStatus(Loc.Get("TrayNotRunning")); });
+        _client.TrayDisconnected += () => RunOnUi(() =>
+        {
+            // Tray 退出(托盘菜单退出/异常结束)→ Panel 一并退出;无 Tray 时 Panel 无法操作设备。
+            if (_closing) return;
+            _closing = true;
+            Close();
+        });
     }
 
     private void RunOnUi(Action a)
@@ -349,6 +356,7 @@ public partial class MainWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        _closing = true; // 自己释放连接也会触发 TrayDisconnected,防止重入
         base.OnClosed(e);
         _simTimer?.Dispose();
         // 关闭即退出进程;取消订阅并释放 IPC(Tray 据此释放连接保留条件)。

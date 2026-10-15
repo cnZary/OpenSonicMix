@@ -66,7 +66,6 @@
   <data name="PhantomConsent" xml:space="preserve"><value>我已了解并允许自动开启 48V 幻象电源。</value></data>
   <data name="DeviceConnected" xml:space="preserve"><value>设备已连接</value></data>
   <data name="DeviceDisconnected" xml:space="preserve"><value>设备已断开</value></data>
-  <data name="TrayNotRunning" xml:space="preserve"><value>托盘服务未运行</value></data>
   <data name="TrayConnecting" xml:space="preserve"><value>正在连接托盘服务…</value></data>
   <data name="Syncing" xml:space="preserve"><value>正在同步设备状态…</value></data>
   <data name="Menu" xml:space="preserve"><value>菜单</value></data>

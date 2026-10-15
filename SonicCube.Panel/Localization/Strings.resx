@@ -78,7 +78,6 @@
   <!-- 状态/错误 -->
   <data name="DeviceConnected" xml:space="preserve"><value>Device connected</value></data>
   <data name="DeviceDisconnected" xml:space="preserve"><value>Device disconnected</value></data>
-  <data name="TrayNotRunning" xml:space="preserve"><value>Tray service is not running</value></data>
   <data name="TrayConnecting" xml:space="preserve"><value>Connecting to tray service…</value></data>
   <data name="Syncing" xml:space="preserve"><value>Syncing device state…</value></data>
   <data name="Menu" xml:space="preserve"><value>Menu</value></data>
