@@ -7,9 +7,10 @@ using SonicCube.Protocol.Models;
 namespace SonicCube.Panel.Views;
 
 /// <summary>
-/// 输入效果编辑区。顶部 MIC1 / LINE/INST 2 页签 + 右侧重置;
+/// 输入效果编辑区。顶部 MIC1 / LINE/INST 2 页签 + 左侧完全重置(整机)+ 右侧重置当前模块;
 /// 左侧窄模块选择列;右侧当前模块编辑区(算法下拉 + 参数旋钮)。
-/// 页签切换只改编辑对象,不发协议。重置为整台设备复位(0x00020013),经确认。
+/// 页签切换只改编辑对象,不发协议。完全重置为整台设备复位(0x00020013),需确认;
+/// 重置当前模块 = 关闭该模块开关并把当前算法参数写回默认值,需确认。
 /// 非首屏模块编辑区按需创建(延迟实例化)。
 /// </summary>
 public partial class EffectSectionView : UserControl
@@ -27,6 +28,7 @@ public partial class EffectSectionView : UserControl
     public event Action<int, int, float>? FxParamRequested;
     public event Action<uint, int>? SetIntRequested;
     public event Action<int /*uiIndex*/>? ResetRequested;
+    public event Action? FullResetRequested;
 
     public EffectSectionView()
     {
@@ -34,6 +36,7 @@ public partial class EffectSectionView : UserControl
         BuildTabs();
         BuildModuleList();
         ResetBtn.Click += (_, _) => ResetRequested?.Invoke(_moduleUi);
+        FullResetBtn.Click += (_, _) => FullResetRequested?.Invoke();
         ApplyLocalization();
         Loc.LanguageChanged += ApplyLocalization;
         SelectPage(0);
@@ -275,6 +278,7 @@ public partial class EffectSectionView : UserControl
     private void ApplyLocalization()
     {
         ResetBtn.Content = Loc.Get("Reset");
+        FullResetBtn.Content = Loc.Get("ResetAll");
         if (TabHost.Children.Count >= 2)
         {
             ((System.Windows.Controls.Primitives.ToggleButton)TabHost.Children[0]).Content = Loc.Get("ChMic1");

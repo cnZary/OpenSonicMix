@@ -68,7 +68,8 @@ public partial class MainWindow : Window
         Fx.FxParamRequested += SendFxParam;
         Rvb.AlgorithmChangeRequested += fxId => SendInt(CommandAddress.WithLocation(CommandAddress.FxAlgorithm, FxCatalog.ModuleRvb), fxId);
         Rvb.FxParamRequested += SendFxParam;
-        Fx.ResetRequested += OnResetRequested;        // 通道按钮联动效果区页签
+        Fx.ResetRequested += OnResetRequested;
+        Fx.FullResetRequested += OnFullResetRequested;        // 通道按钮联动效果区页签
         Mic1.ShowEffectRequested += i => Fx.ShowEffect(i);
         Line2.ShowEffectRequested += i => Fx.ShowEffect(i);
         // 底部菜单
@@ -281,7 +282,16 @@ public partial class MainWindow : Window
         catch { }
     }
 
-    // ── 重置(当前选中模块,需确认)────────────────────────────
+    // ── 重置(当前选中模块 / 完全重置整机,均需确认)──────────────
+
+    private void OnFullResetRequested()
+    {
+        if (_simulate) return;
+        var r = MessageBox.Show(this, Loc.Get("ResetConfirm"), Loc.Get("ResetAll"),
+            MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+        if (r != MessageBoxResult.OK) return;
+        _ = SendSafe(() => _client!.SetIntAsync(CommandAddress.CommandReset, 0));
+    }
 
     private void OnResetRequested(int uiIndex)
     {

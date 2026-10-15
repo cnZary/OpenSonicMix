@@ -27,6 +27,8 @@
   <data name="Reverb" xml:space="preserve"><value>混响</value></data>
   <data name="Algorithm" xml:space="preserve"><value>算法</value></data>
   <data name="Reset" xml:space="preserve"><value>重置</value></data>
+  <data name="ResetAll" xml:space="preserve"><value>完全重置</value></data>
+  <data name="ResetConfirm" xml:space="preserve"><value>确定要将整台设备的预设重置为默认值吗?</value></data>
   <data name="ResetModuleConfirm" xml:space="preserve"><value>确定将 {0} 重置为默认值并关闭吗?</value></data>
   <data name="Hpf75" xml:space="preserve"><value>75 Hz</value></data>
   <data name="Hpf100" xml:space="preserve"><value>100 Hz</value></data>
