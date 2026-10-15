@@ -15,6 +15,8 @@ public sealed class TrayClient : IDisposable
     private int _requestSeq;
     private readonly Dictionary<string, TaskCompletionSource<IpcMessage>> _pending = new();
     private readonly object _pendingSync = new();
+    // 并发调用共享同一次连接/拉起(Tray 进程最多被启动一次)。
+    private readonly SemaphoreSlim _connectGate = new(1, 1);
 
     public bool IsConnected => _conn?.IsConnected == true;
 
@@ -29,12 +31,12 @@ public sealed class TrayClient : IDisposable
     public event Action? TrayDisconnected;                   // 与 Tray 的 IPC 断开
 
     /// <summary>连接 Tray(若未运行则可选启动它)。</summary>
-    public async Task<bool> ConnectAsync(CancellationToken ct = default)
+    public async Task<bool> ConnectAsync(int timeoutMs = 1500, CancellationToken ct = default)
     {
         var pipe = new NamedPipeClientStream(".", TrayPipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
         try
         {
-            await pipe.ConnectAsync(1500, ct).ConfigureAwait(false);
+            await pipe.ConnectAsync(timeoutMs, ct).ConfigureAwait(false);
         }
         catch (TimeoutException)
         {
@@ -56,28 +58,41 @@ public sealed class TrayClient : IDisposable
 
     public const string TrayPipeName = "SonicCubePanel.IPC";
 
-    /// <summary>确保连接;失败时尝试启动 Tray 进程后重连。</summary>
+    /// <summary>
+    /// 确保连接;失败时立即启动 Tray 进程后重连。
+    /// 并发调用经信号量串行(共享同一次连接/拉起);首轮探测用短超时,拉起后密集轮询。
+    /// </summary>
     public async Task<bool> EnsureConnectedAsync(string? trayExePath, CancellationToken ct = default)
     {
         if (IsConnected) return true;
-        if (await ConnectAsync(ct)) return true;
-
-        // 启动 Tray
-        if (trayExePath != null && File.Exists(trayExePath))
+        await _connectGate.WaitAsync(ct).ConfigureAwait(false);
+        try
         {
-            try
+            if (IsConnected) return true; // 另一调用者已连上
+            // 首轮短超时:Tray 已在运行时管道即连即通;不在时避免白等。
+            if (await ConnectAsync(400, ct)) return true;
+
+            // 启动 Tray
+            if (trayExePath != null && File.Exists(trayExePath))
             {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(trayExePath) { UseShellExecute = true });
+                try
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(trayExePath) { UseShellExecute = true });
+                }
+                catch { }
+                // 等待其就绪(Tray 为 NativeAOT 秒开,密集轮询尽快接管)
+                for (int i = 0; i < 30; i++)
+                {
+                    if (await ConnectAsync(150, ct)) return true;
+                    await Task.Delay(100, ct);
+                }
             }
-            catch { }
-            // 等待其就绪
-            for (int i = 0; i < 20; i++)
-            {
-                await Task.Delay(250, ct);
-                if (await ConnectAsync(ct)) return true;
-            }
+            return false;
         }
-        return false;
+        finally
+        {
+            _connectGate.Release();
+        }
     }
 
     /// <summary>启动同步:订阅 + 获取全量快照(带版本号防丢事件)。</summary>

@@ -132,8 +132,14 @@ public partial class MainWindow : Window
         if (_simulate) return;
         UpdateStatus(false);
         BottomBar.SetStatus(Loc.Get("TrayConnecting"));
-        var st = await _client!.SubscribeAndSyncAsync();
-        var settings = await _client.GetSettingsAsync();
+
+        // Tray 未运行时尽早拉起并等它就绪:App.OnStartup 已并发发起同一连接(信号量共享),
+        // 这里等连接建立后再首轮同步,避免空跑一轮后落入粗粒度重试循环。
+        string trayPath = System.IO.Path.Combine(AppContext.BaseDirectory, "SonicCube.Tray.exe");
+        bool conn = await _client!.EnsureConnectedAsync(trayPath);
+
+        var st = conn ? await _client.SubscribeAndSyncAsync() : null;
+        var settings = conn ? await _client.GetSettingsAsync() : null;
         if (settings != null)
         {
             _settings = settings;
@@ -167,9 +173,8 @@ public partial class MainWindow : Window
     private async Task RefresWhenReadyAsync()
     {
         // 设备握手可能要几秒;多轮尝试,每轮先等 Tray 连接可用再(重新)订阅并拉快照。
-        for (int i = 0; i < 40; i++)
+        for (int i = 0; i < 60; i++)
         {
-            await Task.Delay(400);
             if (_client == null) return;
             if (!_client.IsConnected)
             {
@@ -177,15 +182,19 @@ public partial class MainWindow : Window
                 await _client.EnsureConnectedAsync(trayPath);
                 // 重连后必须重新订阅(冷启动时首次 subscribe 可能已超时,导致电平广播被抑制)。
                 await _client.SubscribeAsync();
-                continue;
             }
-            var st = await _client.GetStateDirectAsync();
-            if (st != null && _client.StateVersion > 0)
+            else
             {
-                RunOnUi(() => ApplySnapshot(st));
-                RunOnUi(() => { _synced = true; UpdateUiEnabled(); UpdateStatus(st.Connected); });
-                return;
+                // 已连接则立即拉一次快照(首轮无等待),版本为 0 说明设备握手未完成,下轮再试。
+                var st = await _client.GetStateDirectAsync();
+                if (st != null && _client.StateVersion > 0)
+                {
+                    RunOnUi(() => ApplySnapshot(st));
+                    RunOnUi(() => { _synced = true; UpdateUiEnabled(); UpdateStatus(st.Connected); });
+                    return;
+                }
             }
+            await Task.Delay(200);
         }
     }
 
