@@ -97,6 +97,9 @@ public sealed class ValueMappingTests
         Assert.AreEqual(0.0, ValueMapping.MeterDbToProgress(0), 1e-9);
         Assert.AreEqual(0.0, ValueMapping.MeterDbToProgress(5), 1e-9);
         Assert.AreEqual(0.5, ValueMapping.MeterDbToProgress(-30), 1e-9);
+        Assert.AreEqual(1.0, ValueMapping.MeterDbToProgress(double.NaN), 1e-9);
+        Assert.AreEqual(1.0, ValueMapping.MeterDbToProgress(double.NegativeInfinity), 1e-9);
+        Assert.AreEqual(0.0, ValueMapping.MeterDbToProgress(double.PositiveInfinity), 1e-9);
     }
 
     [TestMethod]

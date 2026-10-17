@@ -81,9 +81,9 @@ public sealed class MeterBar : FrameworkElement
 
     // 快攻慢放(dB/秒)
     private const double AttackDbPerSec = 240;   // 快速上升
-    private const double ReleaseDbPerSec = 12;   // 缓慢回落
+    private const double ReleaseDbPerSec = 24;   // 条体回落,快于峰值线:停声后条先落、峰值悬空慢降
     private static readonly TimeSpan PeakHold = TimeSpan.FromMilliseconds(900);
-    private const double PeakReleaseDbPerSec = 18;
+    private const double PeakReleaseDbPerSec = 10;   // 峰值线慢速下落,始终不落于条顶之下
 
     /// <summary>提交最新电平(dB)。任何线程可调用,只保留最新值;若当前渲染已休眠且有新信号则零延迟唤醒。</summary>
     public void SetLevelDb(float leftDb, float rightDb)

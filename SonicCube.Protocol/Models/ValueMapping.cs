@@ -71,9 +71,10 @@ public static class ValueMapping
     public static double GlobalEqVolToUi(float protocolValue) => protocolValue - 50.0;
 
     // ── 电平表 ──────────────────────────────────────────────
-    /// <summary>电平 dB → 进度(dB≤-60 → 1 空;dB≥0 → 0 满;否则 |dB|/60)。</summary>
+    /// <summary>电平 dB → 进度(dB≤-60 或 NaN → 1 空;dB≥0 或 +∞ → 0 满;否则 |dB|/60)。</summary>
     public static double MeterDbToProgress(double db)
     {
+        if (double.IsNaN(db)) return 1.0;
         if (db <= -60) return 1.0;
         if (db >= 0) return 0.0;
         return Math.Abs(db) / 60.0;
