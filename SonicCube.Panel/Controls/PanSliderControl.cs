@@ -18,6 +18,7 @@ public sealed class PanSliderControl : FrameworkElement
         SnapsToDevicePixels = true;
         UseLayoutRounding = true;
         Cursor = Cursors.Hand;
+        AutomationProperties.SetName(this, "Pan");
         IsEnabledChanged += (_, _) => InvalidateVisual();
     }
 
@@ -209,8 +210,6 @@ public sealed class PanSliderControl : FrameworkElement
         // 5. Fluent 2 圆角滑块帽
         var thumbBrush = !IsEnabled ? _brushOff : (active ? _brushAccentHover : _brushAccent);
         dc.DrawRoundedRectangle(thumbBrush, _thumbPen, new Rect(x - 5.5, cy - 6.5, 11, 13), 3, 3);
-
-        AutomationProperties.SetName(this, "Pan");
     }
 
     private void DrawText(DrawingContext dc, string text, Rect area, Brush brush, double size)

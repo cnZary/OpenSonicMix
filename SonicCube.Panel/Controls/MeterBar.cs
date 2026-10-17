@@ -10,27 +10,65 @@ namespace SonicCube.Panel.Controls;
 /// 双声道电平表(自绘,DrawingContext,Fluent 2 风格)。
 /// 输入为协议 dB;内部以“满刻度比例 0..1”渲染(dB≤-60→0,dB≥0→1)。
 /// 快攻慢放 + 峰值保持:按实际经过时间计算,不按帧数。
-/// 所有实例统一由静态 CompositionTarget.Rendering 驱动(单一订阅,窗口关闭时解除)。
-/// 最小化/不可见时暂停绘制。
+/// 所有实例统一由静态 CompositionTarget.Rendering 驱动(单一订阅,窗口关闭或电平静止时解除,来信号零延迟唤醒)。
+/// 最小化/不可见时暂停绘制;静态背景槽、dB 刻度文字与分段横纹几何体按尺寸预烘焙缓存。
 /// 视觉:分段渐变电平条(绿→黄→红,分界处颜色连续)、右侧 dB 刻度尺(数字 + 刻度线)、双段式峰值保持线。
 /// </summary>
 public sealed class MeterBar : FrameworkElement
 {
-    // ── 静态渲染驱动(全应用一个订阅)────────────────────────
+    // ── 静态渲染驱动(全应用一个订阅,静音/最小化时休眠)─────────
     private static readonly List<WeakReference<MeterBar>> Active = new();
-    private static bool _subscribed;
+    private static volatile bool _subscribed;
+    private static int _wakePending;
     private static DateTime _lastFrame = DateTime.MinValue;
+    private Window? _hostWindow;
+    private bool _windowMinimized;
 
     public MeterBar()
     {
         SnapsToDevicePixels = true;
         UseLayoutRounding = true;
+        AutomationProperties.SetName(this, "Level meter");
         _display = new double[2];
         _peak = new double[2];
         _peakHoldUntil = new DateTime[2];
         IsVisibleChanged += (_, _) => UpdateSubscription();
-        Loaded += (_, _) => Register();
-        Unloaded += (_, _) => Unregister();
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
+    }
+
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        var win = Window.GetWindow(this);
+        if (!ReferenceEquals(_hostWindow, win))
+        {
+            if (_hostWindow is not null) _hostWindow.StateChanged -= OnHostWindowStateChanged;
+            _hostWindow = win;
+            if (_hostWindow is not null)
+            {
+                _hostWindow.StateChanged += OnHostWindowStateChanged;
+                _windowMinimized = _hostWindow.WindowState == WindowState.Minimized;
+            }
+        }
+        Register();
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (_hostWindow is not null)
+        {
+            _hostWindow.StateChanged -= OnHostWindowStateChanged;
+            _hostWindow = null;
+        }
+        Unregister();
+    }
+
+    private void OnHostWindowStateChanged(object? sender, EventArgs e)
+    {
+        bool minimized = _hostWindow?.WindowState == WindowState.Minimized;
+        if (minimized == _windowMinimized) return;
+        _windowMinimized = minimized;
+        UpdateSubscription();
     }
 
     /// <summary>目标电平(dB,-100=无信号)。线程安全:仅保留最新。</summary>
@@ -47,11 +85,51 @@ public sealed class MeterBar : FrameworkElement
     private static readonly TimeSpan PeakHold = TimeSpan.FromMilliseconds(900);
     private const double PeakReleaseDbPerSec = 18;
 
-    /// <summary>提交最新电平(dB)。任何线程可调用,只保留最新值,不向 Dispatcher 排队。</summary>
+    /// <summary>提交最新电平(dB)。任何线程可调用,只保留最新值;若当前渲染已休眠且有新信号则零延迟唤醒。</summary>
     public void SetLevelDb(float leftDb, float rightDb)
     {
         _targetL = leftDb;
         _targetR = rightDb;
+        if (!_subscribed && !_windowMinimized)
+        {
+            double tl = DbToNorm(leftDb);
+            double tr = DbToNorm(rightDb);
+            if (Math.Abs(tl - _display[0]) > 1e-4 || Math.Abs(tr - _display[1]) > 1e-4
+                || tl > _peak[0] + 1e-4 || tr > _peak[1] + 1e-4)
+            {
+                RequestWake();
+            }
+        }
+    }
+
+    private void RequestWake()
+    {
+        if (Interlocked.Exchange(ref _wakePending, 1) != 0) return;
+        if (Dispatcher.HasShutdownStarted) { Interlocked.Exchange(ref _wakePending, 0); return; }
+        if (Dispatcher.CheckAccess())
+        {
+            Interlocked.Exchange(ref _wakePending, 0);
+            EnsureSubscribedOnUi();
+        }
+        else
+        {
+            _ = Dispatcher.InvokeAsync(() =>
+            {
+                Interlocked.Exchange(ref _wakePending, 0);
+                EnsureSubscribedOnUi();
+            }, DispatcherPriority.Render);
+        }
+    }
+
+    private static void EnsureSubscribedOnUi()
+    {
+        lock (Active)
+        {
+            if (_subscribed || Active.Count == 0) return;
+            _lastFrame = DateTime.MinValue;
+            CompositionTarget.Rendering += OnRendering;
+            _subscribed = true;
+        }
     }
 
     private static double DbToNorm(double db)
@@ -63,20 +141,25 @@ public sealed class MeterBar : FrameworkElement
 
     private void UpdateSubscription()
     {
-        bool visible = IsVisible && ActualHeight > 0;
+        bool visible = IsVisible && !_windowMinimized && ActualHeight > 0;
         if (visible) Register(); else Unregister();
     }
 
     private void Register()
     {
+        if (_windowMinimized) return;
         lock (Active)
         {
+            bool found = false;
             foreach (var wr in Active)
-                if (wr.TryGetTarget(out var m) && ReferenceEquals(m, this)) return;
-            Active.Add(new WeakReference<MeterBar>(this));
-            if (_subscribed) return;
-            CompositionTarget.Rendering += OnRendering;
-            _subscribed = true;
+                if (wr.TryGetTarget(out var m) && ReferenceEquals(m, this)) { found = true; break; }
+            if (!found) Active.Add(new WeakReference<MeterBar>(this));
+            if (!_subscribed && NeedsStep(DateTime.UtcNow))
+            {
+                _lastFrame = DateTime.MinValue;
+                CompositionTarget.Rendering += OnRendering;
+                _subscribed = true;
+            }
         }
     }
 
@@ -93,6 +176,7 @@ public sealed class MeterBar : FrameworkElement
             {
                 CompositionTarget.Rendering -= OnRendering;
                 _subscribed = false;
+                _lastFrame = DateTime.MinValue;
             }
         }
     }
@@ -106,21 +190,34 @@ public sealed class MeterBar : FrameworkElement
 
         lock (Active)
         {
+            bool anyActive = false;
             for (int i = Active.Count - 1; i >= 0; i--)
             {
                 if (!Active[i].TryGetTarget(out var m)) { Active.RemoveAt(i); continue; }
-                if (!m.IsVisible || m.ActualHeight <= 0) continue;
-                m.Step(now, dt);
+                if (!m.IsVisible || m._windowMinimized || m.ActualHeight <= 0) continue;
+                if (m.Step(now, dt)) anyActive = true;
             }
-            if (Active.Count == 0 && _subscribed)
+            // 所有通道均已回落静止时自动解除订阅,静音/空闲时 0% CPU/GPU 占用
+            if (!anyActive && _subscribed)
             {
                 CompositionTarget.Rendering -= OnRendering;
                 _subscribed = false;
+                _lastFrame = DateTime.MinValue;
             }
         }
     }
 
-    private void Step(DateTime now, double dt)
+    private bool NeedsStep(DateTime now)
+    {
+        double tl = DbToNorm(_targetL);
+        double tr = DbToNorm(_targetR);
+        return Math.Abs(tl - _display[0]) > 1e-4 || Math.Abs(tr - _display[1]) > 1e-4
+            || _peak[0] > 1e-4 || _peak[1] > 1e-4
+            || now <= _peakHoldUntil[0] || now <= _peakHoldUntil[1];
+    }
+
+    /// <summary>推进一步动画;返回是否仍有未收敛的动画需要下一帧继续。</summary>
+    private bool Step(DateTime now, double dt)
     {
         double targetL = DbToNorm(_targetL);
         double targetR = DbToNorm(_targetR);
@@ -128,6 +225,7 @@ public sealed class MeterBar : FrameworkElement
         changed |= StepChannel(0, targetL, now, dt);
         changed |= StepChannel(1, targetR, now, dt);
         if (changed) InvalidateVisual();
+        return changed || NeedsStep(now);
     }
 
     private bool StepChannel(int ch, double target, DateTime now, double dt)
@@ -136,34 +234,39 @@ public sealed class MeterBar : FrameworkElement
         double cur = _display[ch];
         double stepUp = AttackDbPerSec * dt / 60.0;
         double stepDown = ReleaseDbPerSec * dt / 60.0;
-        double next;
-        if (target > cur) next = Math.Min(target, cur + stepUp);
-        else next = Math.Max(target, cur - stepDown);
+        double next = target > cur ? Math.Min(target, cur + stepUp) : Math.Max(target, cur - stepDown);
         if (Math.Abs(next - cur) > 1e-4) { _display[ch] = next; changed = true; }
+        else if (cur != target) { _display[ch] = target; if (cur > 0) changed = true; }
 
         // 峰值保持
-        if (target >= _peak[ch])
+        if (target >= _peak[ch] && target > 1e-4)
         {
+            if (Math.Abs(target - _peak[ch]) > 1e-4) changed = true;
             _peak[ch] = target;
             _peakHoldUntil[ch] = now + PeakHold;
-            changed = true;
         }
-        else if (now > _peakHoldUntil[ch])
+        else if (_peak[ch] > 0 && now > _peakHoldUntil[ch])
         {
             double pkDb = -60 + _peak[ch] * 60;
             double npDb = Math.Max(-60, pkDb - PeakReleaseDbPerSec * dt);
             double np = (npDb + 60) / 60;
-            if (Math.Abs(np - _peak[ch]) > 1e-4) { _peak[ch] = np; changed = true; }
+            if (np <= 1e-4) np = 0;
+            if (Math.Abs(np - _peak[ch]) > 1e-4 || (np == 0 && _peak[ch] > 0)) { _peak[ch] = np; changed = true; }
         }
         return changed;
     }
 
-    // ── 画刷缓存(资源查找走 Application.Resources,固定引用,实例间共享)──
+    // ── 画刷与静态几何缓存(背景槽、刻度文字、横纹仅在尺寸/DPI 改变时构建一次)──
     private Brush? _track, _tick, _peakWhite, _peakWarn, _scaleText, _scaleTextHi;
     private Pen? _trackPen, _tickPen, _peakWhitePen, _peakWarnPen;
     private Typeface? _typeface;
     private LinearGradientBrush? _fill;      // 电平条渐变(绿→黄→红,分界连续)
-    private DrawingBrush? _segments;         // 分段横纹(平铺在电平条上)
+
+    // 按控件尺寸/DPI 预烘焙的静态缓存
+    private double _cachedW, _cachedH, _cachedDpi;
+    private double _cachedYTop, _cachedTrackH, _cachedBarW;
+    private DrawingGroup? _staticBackdrop;   // L/R 圆角槽 + 右侧刻度线 + dB 数字
+    private GeometryDrawing?[] _segmentOverlays = new GeometryDrawing?[2]; // L/R 预烘焙横纹间隙
 
     private void EnsureBrushes()
     {
@@ -201,24 +304,6 @@ public sealed class MeterBar : FrameworkElement
         };
         _fill = new LinearGradientBrush(stops, new Point(0, 1), new Point(0, 0));
         _fill.Freeze();
-
-        // 分段横纹:0..3px 透明露出下层渐变色,3..4.5px 用轨道深色画横纹间隙。
-        // 注意:DrawingBrush 的 Viewbox 默认按 BoundingBox 归一化,所以必须同时放置透明底框(0,0,1,4.5)
-        // 或显式指定 Viewbox=(0,0,1,4.5)+Absolute,否则单个子矩形会被 Stretch.Fill 拉伸铺满整个 Viewport!
-        var group = new DrawingGroup();
-        group.Children.Add(new GeometryDrawing(Brushes.Transparent, null, new RectangleGeometry(new Rect(0, 0, 1, 4.5))));
-        group.Children.Add(new GeometryDrawing(_track, null, new RectangleGeometry(new Rect(0, 3, 1, 1.5))));
-        group.Freeze();
-        _segments = new DrawingBrush(group)
-        {
-            TileMode = TileMode.Tile,
-            Viewbox = new Rect(0, 0, 1, 4.5),
-            ViewboxUnits = BrushMappingMode.Absolute,
-            Viewport = new Rect(0, 0, 1, 4.5),
-            ViewportUnits = BrushMappingMode.Absolute,
-            Stretch = Stretch.Fill,
-        };
-        _segments.Freeze();
     }
 
     private static Color Scale(Color c, double f) =>
@@ -227,78 +312,129 @@ public sealed class MeterBar : FrameworkElement
             (byte)Math.Min(255, (int)(c.G * f + 0.5)),
             (byte)Math.Min(255, (int)(c.B * f + 0.5)));
 
-    private static GuidelineSet VerticalGuidelines(params double[] xs) => new(xs, null);
-
-    // 刻度为静态内容:启动时格式化一次,避免每帧 $"" 插值分配(同 VolumeFaderControl)。
     private static readonly double[] ScaleDbs = [0.0, -3, -12, -20, -40, -60];
     private static readonly string[] ScaleLabels = ScaleDbs.Select(db => $"{db:0}").ToArray();
+    private const double Gap = 2;
 
-    private FormattedText ScaleLabel(int i, Brush brush) => new(
+    private FormattedText CreateScaleLabel(int i, Brush brush, double dpi) => new(
         ScaleLabels[i], System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
-        _typeface!, 7.5, brush, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        _typeface!, 7.5, brush, dpi);
+
+    private void EnsureStaticCache(double w, double h)
+    {
+        double dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        if (_staticBackdrop is not null
+            && Math.Abs(w - _cachedW) < 0.05
+            && Math.Abs(h - _cachedH) < 0.05
+            && Math.Abs(dpi - _cachedDpi) < 0.001)
+            return;
+
+        _cachedW = w;
+        _cachedH = h;
+        _cachedDpi = dpi;
+
+        const double scaleW = 20;
+        double barsW = Math.Max(4, w - scaleW);
+        double barW = (barsW - Gap) / 2;
+        var label0 = CreateScaleLabel(0, _scaleTextHi!, dpi);
+        double pad = label0.Height / 2;
+        double yTop = pad, trackH = Math.Max(4, h - pad * 2);
+
+        _cachedYTop = yTop;
+        _cachedTrackH = trackH;
+        _cachedBarW = barW;
+
+        var backdrop = new DrawingGroup();
+        backdrop.GuidelineSet = new GuidelineSet([0, barW, barW + Gap, barsW, w], null);
+        using (var dc = backdrop.Open())
+        {
+            // 1. L / R 两个圆角槽
+            for (int i = 0; i < 2; i++)
+            {
+                var barSlot = new Rect(i * (barW + Gap), yTop, barW, trackH);
+                dc.DrawRoundedRectangle(_track, _trackPen, barSlot, 2, 2);
+            }
+
+            // 2. dB 刻度:数字右对齐于刻度区;-3/-12 即黄/红分界,数字提亮呼应颜色阈值
+            for (int i = 0; i < ScaleDbs.Length; i++)
+            {
+                double db = ScaleDbs[i];
+                double y = yTop + trackH * (1 - DbToNorm(db));
+                double ys = Math.Round(y) + 0.5;
+                dc.DrawLine(_tickPen, new Point(barsW + 1, ys), new Point(barsW + 4, ys));
+                bool hi = db is 0.0 or -3 or -12;
+                var t = i == 0 ? label0 : CreateScaleLabel(i, hi ? _scaleTextHi! : _scaleText!, dpi);
+                dc.DrawText(t, new Point(w - t.Width, y - t.Height / 2));
+            }
+        }
+        backdrop.Freeze();
+        _staticBackdrop = backdrop;
+
+        // 3. 预烘焙 L/R 分段横纹间隙(替代每帧 DrawingBrush TileMode.Tile 采样)
+        double yBottom = yTop + trackH;
+        for (int ch = 0; ch < 2; ch++)
+        {
+            double bx = ch * (barW + Gap) + 0.5;
+            double bw = Math.Max(1, barW - 1);
+            var segGeo = new StreamGeometry();
+            using (var ctx = segGeo.Open())
+            {
+                // 与原 Viewport=(0,0,1,4.5) 瓦片中 [3..4.5] 区间完全对齐
+                double firstTileY = Math.Floor(yTop / 4.5) * 4.5;
+                for (double tileY = firstTileY; tileY < yBottom; tileY += 4.5)
+                {
+                    double sy0 = Math.Max(yTop, tileY + 3.0);
+                    double sy1 = Math.Min(yBottom, tileY + 4.5);
+                    if (sy1 <= sy0) continue;
+                    ctx.BeginFigure(new Point(bx, sy0), true, true);
+                    ctx.LineTo(new Point(bx + bw, sy0), false, false);
+                    ctx.LineTo(new Point(bx + bw, sy1), false, false);
+                    ctx.LineTo(new Point(bx, sy1), false, false);
+                }
+            }
+            segGeo.Freeze();
+            var drawing = new GeometryDrawing(_track, null, segGeo);
+            drawing.Freeze();
+            _segmentOverlays[ch] = drawing;
+        }
+    }
 
     protected override void OnRender(DrawingContext dc)
     {
         double w = ActualWidth, h = ActualHeight;
         if (w < 10 || h < 10) return;
         EnsureBrushes();
+        EnsureStaticCache(w, h);
 
-        // 布局:[ 电平条 L/R | 刻度区(刻度线 + dB 数字) ]
-        const double scaleW = 20;
-        double barsW = Math.Max(4, w - scaleW);
-        const double gap = 2;
-        double barW = (barsW - gap) / 2;
-        double pad = ScaleLabel(0, _scaleText!).Height / 2;
-        double yTop = pad, trackH = Math.Max(4, h - pad * 2);
-        dc.PushGuidelineSet(VerticalGuidelines(0, barW, barW + gap, barsW, w));
+        dc.DrawDrawing(_staticBackdrop);
 
-        // 分别绘制 L / R 两个圆角槽(更具现代数字调音台 LED 柱质感)
+        double barW = _cachedBarW, yTop = _cachedYTop, trackH = _cachedTrackH;
         for (int i = 0; i < 2; i++)
         {
-            var barSlot = new Rect(i * (barW + gap), yTop, barW, trackH);
-            dc.DrawRoundedRectangle(_track, _trackPen, barSlot, 2, 2);
-        }
-
-        // dB 刻度:数字右对齐于刻度区;-3/-12 即黄/红分界,数字提亮呼应颜色阈值
-        for (int i = 0; i < ScaleDbs.Length; i++)
-        {
-            double db = ScaleDbs[i];
-            double y = yTop + trackH * (1 - DbToNorm(db));
-            double ys = Math.Round(y) + 0.5;
-            dc.DrawLine(_tickPen, new Point(barsW + 1, ys), new Point(barsW + 4, ys));
-            bool hi = db is 0.0 or -3 or -12;
-            var t = ScaleLabel(i, hi ? _scaleTextHi! : _scaleText!);
-            dc.DrawText(t, new Point(w - t.Width, y - t.Height / 2));
-        }
-
-        for (int i = 0; i < 2; i++)
-        {
-            var bar = new Rect(i * (barW + gap) + 0.5, yTop, Math.Max(1, barW - 1), trackH);
-            DrawLevel(dc, bar, _display[i], trackH);
+            var bar = new Rect(i * (barW + Gap) + 0.5, yTop, Math.Max(1, barW - 1), trackH);
+            DrawLevel(dc, i, bar, _display[i], trackH);
             DrawPeak(dc, bar, _peak[i], trackH);
         }
-        dc.Pop();
-
-        AutomationProperties.SetName(this, "Level meter");
     }
 
-    private void DrawLevel(DrawingContext dc, Rect bar, double level, double h)
+    private void DrawLevel(DrawingContext dc, int ch, Rect bar, double level, double h)
     {
         if (level <= 0.001) return;
-        double fillH = Math.Round(h * level);
-        if (fillH < 1) return;
+        double fillH = h * level;
+        if (fillH < 0.5) return;
 
-        // 用 clip 限制在填充段区域,画全高渐变矩形并叠一层分段横纹
-        dc.PushClip(new RectangleGeometry(new Rect(bar.X, bar.Bottom - fillH, bar.Width, fillH), 1.5, 1.5));
-        dc.DrawRectangle(_fill, null, new Rect(bar.X, bar.Y, bar.Width, h));
-        dc.DrawRectangle(_segments, null, new Rect(bar.X, bar.Y, bar.Width, h));
+        // 轴对齐矩形 Clip 走 Direct3D 硬件 Scissor 快路径(无圆角几何抗锯齿蒙版开销),
+        // 内部绘制全高冻结渐变 + 预烘焙横纹几何体
+        dc.PushClip(new RectangleGeometry(new Rect(bar.X, bar.Bottom - fillH, bar.Width, fillH)));
+        dc.DrawRectangle(_fill, null, bar);
+        dc.DrawDrawing(_segmentOverlays[ch]);
         dc.Pop();
     }
 
     private void DrawPeak(DrawingContext dc, Rect bar, double peak, double h)
     {
         if (peak <= 0.001) return;
-        double py = bar.Y + Math.Round(h * (1 - peak)) + 0.5;
+        double py = bar.Y + h * (1 - peak);
         var pen = peak >= 1 - 3.0 / 60 ? _peakWarnPen : _peakWhitePen;
         dc.DrawLine(pen, new Point(bar.X + 0.5, py), new Point(bar.Right - 0.5, py));
     }

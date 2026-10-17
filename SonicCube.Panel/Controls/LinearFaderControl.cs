@@ -14,6 +14,7 @@ public sealed class LinearFaderControl : FrameworkElement
         SnapsToDevicePixels = true;
         UseLayoutRounding = true;
         Cursor = Cursors.Hand;
+        AutomationProperties.SetName(this, "Level");
         IsEnabledChanged += (_, _) => InvalidateVisual();
     }
 
@@ -234,6 +235,5 @@ public sealed class LinearFaderControl : FrameworkElement
         var gripPen = (Math.Abs(Value - DefaultValue) < 0.5 || active) ? _accentPen : _linePen;
         double gy = Math.Round(y) + 0.5;
         dc.DrawLine(gripPen, new Point(cx - 8, gy), new Point(cx + 8, gy));
-        AutomationProperties.SetName(this, "Level");
     }
 }

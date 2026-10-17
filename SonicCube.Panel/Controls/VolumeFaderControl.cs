@@ -20,6 +20,7 @@ public sealed class VolumeFaderControl : FrameworkElement
         SnapsToDevicePixels = true;
         UseLayoutRounding = true;
         Cursor = Cursors.Hand;
+        AutomationProperties.SetName(this, "Volume fader");
         IsEnabledChanged += (_, _) => InvalidateVisual();
     }
 
@@ -253,39 +254,62 @@ public sealed class VolumeFaderControl : FrameworkElement
         _typeface = new Typeface(new FontFamily("Cascadia Mono, Bahnschrift, Segoe UI"), FontStyles.Normal, FontWeights.Medium, FontStretches.Normal);
     }
 
-    private FormattedText Label(string s, Brush brush) => new(
-        s, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
-        _typeface!, 8.5, brush, VisualTreeHelper.GetDpi(this).PixelsPerDip);
-
-    // 刻度为静态内容:启动时格式化一次,避免每帧 $"" 插值分配。
+    // 刻度为静态内容:启动时格式化一次,并按尺寸/DPI 预烘焙静态刻度与轨道背景。
     private static readonly double[] TickDbs = [10.0, 5, 0, -5, -10, -20, -30, -51];
     private static readonly string[] TickLabels = TickDbs.Select(db => db > 0 ? $"+{db:0}" : $"{db:0}").ToArray();
+    private double _cachedW, _cachedH, _cachedDpi;
+    private DrawingGroup? _staticBackdrop;
+
+    private void EnsureStaticCache(double w, double h)
+    {
+        double dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        if (_staticBackdrop is not null
+            && Math.Abs(w - _cachedW) < 0.05
+            && Math.Abs(h - _cachedH) < 0.05
+            && Math.Abs(dpi - _cachedDpi) < 0.001)
+            return;
+
+        _cachedW = w;
+        _cachedH = h;
+        _cachedDpi = dpi;
+
+        double cx = w / 2 + 4;
+        var backdrop = new DrawingGroup();
+        using (var dc = backdrop.Open())
+        {
+            // 1. dB 数字刻度(左缘右对齐)+ 双侧刻度线;0dB 为物理参考点,数字与刻度线提亮
+            for (int i = 0; i < TickDbs.Length; i++)
+            {
+                double db = TickDbs[i];
+                double y = DbToY(db);
+                double ys = Math.Round(y) + 0.5;
+                var pen = db == 0 ? _zeroTickPen : _tickPen;
+                double tickLen = db == 0 ? 8 : 6;
+                dc.DrawLine(pen, new Point(cx - 4 - tickLen, ys), new Point(cx - 4, ys));
+                dc.DrawLine(pen, new Point(cx + 4, ys), new Point(cx + 4 + tickLen, ys));
+                var t = new FormattedText(TickLabels[i], System.Globalization.CultureInfo.InvariantCulture,
+                    FlowDirection.LeftToRight, _typeface!, 8.5, db == 0 ? _textHi! : _text!, dpi);
+                dc.DrawText(t, new Point(cx - 14 - t.Width, y - t.Height / 2));
+            }
+
+            // 2. 轨道(深色凹槽 + 细微高光描边)
+            var trackRect = new Rect(cx - 2.5, TrackTop, 5, TrackHeight);
+            dc.DrawRoundedRectangle(_track, _trackBorderPen, trackRect, 2.5, 2.5);
+        }
+        backdrop.Freeze();
+        _staticBackdrop = backdrop;
+    }
 
     protected override void OnRender(DrawingContext dc)
     {
         double w = ActualWidth, h = ActualHeight;
         if (w < 20 || h < 20) return;
         EnsureResources();
+        EnsureStaticCache(w, h);
         bool active = _dragging || IsMouseOver;
         double cx = w / 2 + 4;   // 轨道中心右移,左侧留出 dB 数字刻度
 
-        // 1. dB 数字刻度(左缘右对齐)+ 双侧刻度线;0dB 为物理参考点,数字与刻度线提亮
-        for (int i = 0; i < TickDbs.Length; i++)
-        {
-            double db = TickDbs[i];
-            double y = DbToY(db);
-            double ys = Math.Round(y) + 0.5;
-            var pen = db == 0 ? _zeroTickPen : _tickPen;
-            double tickLen = db == 0 ? 8 : 6;
-            dc.DrawLine(pen, new Point(cx - 4 - tickLen, ys), new Point(cx - 4, ys));
-            dc.DrawLine(pen, new Point(cx + 4, ys), new Point(cx + 4 + tickLen, ys));
-            var t = Label(TickLabels[i], db == 0 ? _textHi! : _text!);
-            dc.DrawText(t, new Point(cx - 14 - t.Width, y - t.Height / 2));
-        }
-
-        // 2. 轨道(深色凹槽 + 细微高光描边)
-        var trackRect = new Rect(cx - 2.5, TrackTop, 5, TrackHeight);
-        dc.DrawRoundedRectangle(_track, _trackBorderPen, trackRect, 2.5, 2.5);
+        dc.DrawDrawing(_staticBackdrop);
 
         // 3. 行程激活填充条(从底部到当前推子位置)
         double thumbY = DbToY(Db);
@@ -307,7 +331,5 @@ public sealed class VolumeFaderControl : FrameworkElement
 
         var gripPen = (Math.Abs(Db) < 0.05 || active) ? _thumbLineAccentPen : _thumbLinePen;
         dc.DrawLine(gripPen, new Point(cx - 9, gy), new Point(cx + 9, gy));
-
-        AutomationProperties.SetName(this, "Volume fader");
     }
 }

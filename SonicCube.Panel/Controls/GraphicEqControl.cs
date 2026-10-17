@@ -20,6 +20,7 @@ public sealed class GraphicEqControl : FrameworkElement
         UseLayoutRounding = true;
         MinHeight = 148;
         Cursor = Cursors.Cross;
+        AutomationProperties.SetName(this, "Global EQ");
         IsEnabledChanged += (_, _) => InvalidateVisual();
     }
 
@@ -212,35 +213,60 @@ public sealed class GraphicEqControl : FrameworkElement
         (1000, "1k"), (2000, "2k"), (5000, "5k"), (10000, "10k")
     ];
 
+    private double _cachedW, _cachedH, _cachedDpi;
+    private DrawingGroup? _staticBackdrop;
+
+    private void EnsureStaticCache(double w, double h, double dpi)
+    {
+        if (_staticBackdrop is not null
+            && Math.Abs(w - _cachedW) < 0.05
+            && Math.Abs(h - _cachedH) < 0.05
+            && Math.Abs(dpi - _cachedDpi) < 0.001)
+            return;
+
+        _cachedW = w;
+        _cachedH = h;
+        _cachedDpi = dpi;
+
+        double midY = Math.Round(h / 2) + 0.5;
+        var backdrop = new DrawingGroup();
+        using (var dc = backdrop.Open())
+        {
+            dc.DrawRectangle(_bgBrush, null, new Rect(0, 0, w, h));
+
+            foreach (double g in new[] { 10.0, -10.0 })
+            {
+                double gy = Math.Round(ValueMapping.EqGainToNorm(g) * h) + 0.5;
+                dc.DrawLine(_gridPen, new Point(0, gy), new Point(w, gy));
+            }
+            dc.DrawLine(_zeroPen, new Point(0, midY), new Point(w, midY));
+
+            foreach (var (f, lbl) in GridFreqs)
+            {
+                double x = Math.Round(ValueMapping.EqFreqToNorm(f) * w) + 0.5;
+                dc.DrawLine(_gridPen, new Point(x, 0), new Point(x, h));
+                if (f is 100 or 1000 or 10000)
+                {
+                    var ft = new FormattedText(lbl, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+                        _typeface!, 8.5, _axisTextBrush!, dpi);
+                    dc.DrawText(ft, new Point(x + 3, h - ft.Height - 2));
+                }
+            }
+        }
+        backdrop.Freeze();
+        _staticBackdrop = backdrop;
+    }
+
     protected override void OnRender(DrawingContext dc)
     {
         double w = ActualWidth, h = ActualHeight;
         if (w < 8 || h < 8) return;
         EnsureResources();
-        dc.DrawRectangle(_bgBrush, null, new Rect(0, 0, w, h));
+        var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        EnsureStaticCache(w, h, dpi);
+        dc.DrawDrawing(_staticBackdrop);
 
         double midY = Math.Round(h / 2) + 0.5;
-
-        // 1. 频率与增益参考网格
-        foreach (double g in new[] { 10.0, -10.0 })
-        {
-            double gy = Math.Round(ValueMapping.EqGainToNorm(g) * h) + 0.5;
-            dc.DrawLine(_gridPen, new Point(0, gy), new Point(w, gy));
-        }
-        dc.DrawLine(_zeroPen, new Point(0, midY), new Point(w, midY));
-
-        var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
-        foreach (var (f, lbl) in GridFreqs)
-        {
-            double x = Math.Round(ValueMapping.EqFreqToNorm(f) * w) + 0.5;
-            dc.DrawLine(_gridPen, new Point(x, 0), new Point(x, h));
-            if (f is 100 or 1000 or 10000)
-            {
-                var ft = new FormattedText(lbl, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
-                    _typeface!, 8.5, _axisTextBrush!, dpi);
-                dc.DrawText(ft, new Point(x + 3, h - ft.Height - 2));
-            }
-        }
 
         // 2. 响应曲线与半透明包络填充
         var strokeGeo = new StreamGeometry();
@@ -285,7 +311,6 @@ public sealed class GraphicEqControl : FrameworkElement
             string txt = $"{FormatFreq(_freq[i])} {_gain[i]:+0;-0;0}dB" + (i == 1 ? $" Q{_q:0.##}" : "");
             DrawBadge(dc, txt, new Point(x, y < 28 ? y + 18 : y - 18), textBrush, dpi, w);
         }
-        AutomationProperties.SetName(this, "Global EQ");
     }
 
     private static string FormatFreq(double f) => f >= 1000 ? $"{f / 1000:0.##}k" : $"{f:0}";

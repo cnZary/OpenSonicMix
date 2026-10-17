@@ -25,6 +25,7 @@ public sealed class KnobControl : FrameworkElement
         SnapsToDevicePixels = true;
         UseLayoutRounding = true;
         Cursor = Cursors.Hand;
+        AutomationProperties.SetName(this, "Knob");
         IsEnabledChanged += (_, _) => InvalidateVisual();
         _editor.Visibility = Visibility.Collapsed;
         _editor.TextAlignment = TextAlignment.Center;
@@ -54,7 +55,13 @@ public sealed class KnobControl : FrameworkElement
     public double DefaultValue { get => (double)GetValue(DefaultValueProperty); set => SetValue(DefaultValueProperty, value); }
 
     public static readonly DependencyProperty ParamNameProperty = DependencyProperty.Register(
-        nameof(ParamName), typeof(string), typeof(KnobControl), new PropertyMetadata("", (d, _) => ((KnobControl)d).InvalidateVisual()));
+        nameof(ParamName), typeof(string), typeof(KnobControl), new PropertyMetadata("", (d, e) =>
+        {
+            var k = (KnobControl)d;
+            string name = e.NewValue as string ?? "";
+            AutomationProperties.SetName(k, string.IsNullOrEmpty(name) ? "Knob" : name);
+            k.InvalidateVisual();
+        }));
     public string ParamName { get => (string)GetValue(ParamNameProperty); set => SetValue(ParamNameProperty, value); }
 
     public event Action<double>? ValueCommitted;
@@ -242,6 +249,7 @@ public sealed class KnobControl : FrameworkElement
     private Brush? _panelDeep, _accent, _accentHover, _off, _textPrimary, _textSecondary, _textDisabled, _pillFill;
     private LinearGradientBrush? _capFill, _capFillHover, _capElevationStroke;
     private Pen? _trackArcPen, _activeArcPen, _hoverArcPen, _capBorderPen, _pillBorderPen, _tickDotPen;
+    private Pen? _pointerNormalPen, _pointerActivePen, _pointerDisabledPen;
     private Typeface? _labelTypeface, _valueTypeface;
 
     private void EnsureResources()
@@ -283,6 +291,11 @@ public sealed class KnobControl : FrameworkElement
         _activeArcPen = new Pen(_accent, 3) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
         _hoverArcPen = new Pen(_accentHover, 3.2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
         _trackArcPen.Freeze(); _activeArcPen.Freeze(); _hoverArcPen.Freeze();
+
+        _pointerNormalPen = new Pen(Brushes.White, 2.2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+        _pointerActivePen = new Pen(_accentHover, 2.2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+        _pointerDisabledPen = new Pen(_textDisabled, 2.2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+        _pointerNormalPen.Freeze(); _pointerActivePen.Freeze(); _pointerDisabledPen.Freeze();
 
         var tickBrush = new SolidColorBrush(Color.FromArgb(0x45, 0xFF, 0xFF, 0xFF));
         tickBrush.Freeze();
@@ -329,8 +342,7 @@ public sealed class KnobControl : FrameworkElement
         double ang = (135 + 270 * t) * Math.PI / 180.0;
         var pOuter = new Point(cx + Math.Cos(ang) * (capRadius - 3), cy + Math.Sin(ang) * (capRadius - 3));
         var pInner = new Point(cx + Math.Cos(ang) * (capRadius * 0.28), cy + Math.Sin(ang) * (capRadius * 0.28));
-        var pointerBrush = !IsEnabled ? _textDisabled! : (active ? _accentHover! : Brushes.White);
-        var pointerPen = new Pen(pointerBrush, 2.2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+        var pointerPen = !IsEnabled ? _pointerDisabledPen : (active ? _pointerActivePen : _pointerNormalPen);
         dc.DrawLine(pointerPen, pInner, pOuter);
         dc.DrawEllipse(_panelDeep, null, new Point(cx, cy), 3.0, 3.0);
 
@@ -340,8 +352,6 @@ public sealed class KnobControl : FrameworkElement
         var pillRect = new Rect((w - pillW) / 2, h - valueH + 1, pillW, valueH - 2);
         dc.DrawRoundedRectangle(_pillFill, _pillBorderPen, pillRect, 3.5, 3.5);
         DrawText(dc, txt, pillRect, IsEnabled ? _textPrimary! : _textDisabled!, _valueTypeface!, 11);
-
-        AutomationProperties.SetName(this, string.IsNullOrEmpty(ParamName) ? "Knob" : ParamName);
     }
 
     private void DrawText(DrawingContext dc, string text, Rect area, Brush brush, Typeface typeface, double size)
