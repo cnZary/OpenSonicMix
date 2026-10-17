@@ -20,6 +20,7 @@ public sealed class VolumeFaderControl : FrameworkElement
         SnapsToDevicePixels = true;
         UseLayoutRounding = true;
         Cursor = Cursors.Hand;
+        IsEnabledChanged += (_, _) => InvalidateVisual();
     }
 
     public static readonly DependencyProperty DbProperty = DependencyProperty.Register(

@@ -20,6 +20,7 @@ public sealed class GraphicEqControl : FrameworkElement
         UseLayoutRounding = true;
         MinHeight = 148;
         Cursor = Cursors.Cross;
+        IsEnabledChanged += (_, _) => InvalidateVisual();
     }
 
     // location: 0/1(低切 freq/gain), 2/3/4(峰 freq/Q/gain), 5/6(高切 freq/gain)

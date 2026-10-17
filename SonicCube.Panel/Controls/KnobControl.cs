@@ -25,6 +25,7 @@ public sealed class KnobControl : FrameworkElement
         SnapsToDevicePixels = true;
         UseLayoutRounding = true;
         Cursor = Cursors.Hand;
+        IsEnabledChanged += (_, _) => InvalidateVisual();
         _editor.Visibility = Visibility.Collapsed;
         _editor.TextAlignment = TextAlignment.Center;
         _editor.LostFocus += (_, _) => CommitEditor();

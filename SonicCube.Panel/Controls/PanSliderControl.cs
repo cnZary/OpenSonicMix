@@ -18,6 +18,7 @@ public sealed class PanSliderControl : FrameworkElement
         SnapsToDevicePixels = true;
         UseLayoutRounding = true;
         Cursor = Cursors.Hand;
+        IsEnabledChanged += (_, _) => InvalidateVisual();
     }
 
     public static readonly DependencyProperty ValueProperty = DependencyProperty.Register(
