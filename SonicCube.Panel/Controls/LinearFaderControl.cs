@@ -5,13 +5,15 @@ using System.Windows.Media;
 
 namespace SonicCube.Panel.Controls;
 
-/// <summary>线性垂直滑条(min~max 线性,双击回默认)。用于 Global EQ 总音量等线性参数。</summary>
+/// <summary>线性垂直滑条(min~max 线性,双击回默认,Fluent 2 风格)。用于 Global EQ 总音量等线性参数。</summary>
 public sealed class LinearFaderControl : FrameworkElement
 {
     public LinearFaderControl()
     {
-        Width = 36; Height = 150;
+        Width = 38; Height = 130;
         SnapsToDevicePixels = true;
+        UseLayoutRounding = true;
+        Cursor = Cursors.Hand;
     }
 
     public static readonly DependencyProperty ValueProperty = DependencyProperty.Register(
@@ -53,22 +55,42 @@ public sealed class LinearFaderControl : FrameworkElement
 
     public void SetValueSilently(double v) => SetCurrentValue(ValueProperty, Math.Clamp(v, Minimum, Maximum));
 
-    private double TrackTop => 4;
-    private double TrackHeight => Math.Max(10, ActualHeight - 8);
+    private double TrackTop => 7;
+    private double TrackHeight => Math.Max(10, ActualHeight - 14);
 
     // ── 画笔/画刷缓存 ──
-    private Brush? _panelDeep, _control, _accent;
-    private Pen? _thumbPen, _accentPen;
+    private Brush? _track, _accent, _activeFill;
+    private LinearGradientBrush? _thumbFill, _thumbFillHover, _thumbBorderGrad;
+    private Pen? _trackBorderPen, _tickPen, _thumbPen, _accentPen, _linePen;
 
     private void EnsureResources()
     {
         if (_thumbPen is not null) return;
-        _panelDeep = (Brush)FindResource("BrushPanelDeep");
-        _control = (Brush)FindResource("BrushControl");
+        _track = (Brush)FindResource("BrushFaderTrack");
         _accent = (Brush)FindResource("BrushAccent");
-        _thumbPen = new Pen((Brush)FindResource("BrushBorderLight"), 1);
+        _activeFill = new SolidColorBrush(Color.FromArgb(0xAA, 0x4C, 0xC2, 0xFF));
+        _activeFill.Freeze();
+
+        _thumbFill = new LinearGradientBrush(
+            (Color)FindResource("ColorThumbTop"), (Color)FindResource("ColorThumbBottom"), 90);
+        _thumbFill.Freeze();
+        _thumbFillHover = new LinearGradientBrush(
+            Color.FromRgb(0x58, 0x58, 0x62), Color.FromRgb(0x3D, 0x3D, 0x45), 90);
+        _thumbFillHover.Freeze();
+        _thumbBorderGrad = new LinearGradientBrush(
+            Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF), Color.FromArgb(0x50, 0x00, 0x00, 0x00), 90);
+        _thumbBorderGrad.Freeze();
+
+        var trackStroke = new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF));
+        trackStroke.Freeze();
+        _trackBorderPen = new Pen(trackStroke, 1);
+        _trackBorderPen.Freeze();
+
+        _tickPen = new Pen((Brush)FindResource("BrushTickMajor"), 1);
+        _thumbPen = new Pen(_thumbBorderGrad, 1);
         _accentPen = new Pen(_accent, 2);
-        _thumbPen.Freeze(); _accentPen.Freeze();
+        _linePen = new Pen((Brush)FindResource("BrushThumbLine"), 2);
+        _tickPen.Freeze(); _thumbPen.Freeze(); _accentPen.Freeze(); _linePen.Freeze();
     }
 
     private double YToValue(double y)
@@ -83,6 +105,18 @@ public sealed class LinearFaderControl : FrameworkElement
         return TrackTop + (1 - t) * TrackHeight;
     }
 
+    protected override void OnMouseEnter(MouseEventArgs e)
+    {
+        base.OnMouseEnter(e);
+        InvalidateVisual();
+    }
+
+    protected override void OnMouseLeave(MouseEventArgs e)
+    {
+        base.OnMouseLeave(e);
+        InvalidateVisual();
+    }
+
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonDown(e);
@@ -90,6 +124,7 @@ public sealed class LinearFaderControl : FrameworkElement
         if (e.ClickCount == 2)
         {
             SetValueSilently(DefaultValue);
+            ValueChanging?.Invoke(DefaultValue);
             ValueCommitted?.Invoke(DefaultValue);
             e.Handled = true;
             return;
@@ -97,6 +132,7 @@ public sealed class LinearFaderControl : FrameworkElement
         _dragging = true;
         CaptureMouse();
         Apply(e.GetPosition(this).Y);
+        InvalidateVisual();
         e.Handled = true;
     }
 
@@ -120,7 +156,19 @@ public sealed class LinearFaderControl : FrameworkElement
         if (!_dragging) return;
         _dragging = false;
         ReleaseMouseCapture();
+        InvalidateVisual();
         ValueCommitted?.Invoke(Value);
+        e.Handled = true;
+    }
+
+    protected override void OnMouseWheel(MouseWheelEventArgs e)
+    {
+        base.OnMouseWheel(e);
+        double nv = Math.Clamp(Value + (e.Delta > 0 ? 1 : -1), Minimum, Maximum);
+        if (Math.Abs(nv - Value) < 0.5) return;
+        SetValueSilently(nv);
+        ValueChanging?.Invoke(nv);
+        ValueCommitted?.Invoke(nv);
         e.Handled = true;
     }
 
@@ -139,6 +187,7 @@ public sealed class LinearFaderControl : FrameworkElement
         {
             nv = Math.Clamp(nv, Minimum, Maximum);
             SetValueSilently(nv);
+            ValueChanging?.Invoke(nv);
             ValueCommitted?.Invoke(nv);
             e.Handled = true;
         }
@@ -149,12 +198,29 @@ public sealed class LinearFaderControl : FrameworkElement
         double w = ActualWidth, h = ActualHeight;
         if (w < 4 || h < 4) return;
         EnsureResources();
+        bool active = _dragging || IsMouseOver;
         double cx = w / 2;
-        dc.DrawRectangle(_panelDeep, null, new Rect(cx - 2, TrackTop, 4, TrackHeight));
+
+        // 中心 0 位刻度线
+        double midY = Math.Round(ValueToY(DefaultValue)) + 0.5;
+        dc.DrawLine(_tickPen, new Point(cx - 12, midY), new Point(cx + 12, midY));
+
+        // 轨道
+        dc.DrawRoundedRectangle(_track, _trackBorderPen, new Rect(cx - 2.5, TrackTop, 5, TrackHeight), 2.5, 2.5);
+
+        // 双极填充(从中心默认值到当前值)
         double y = ValueToY(Value);
-        var thumb = new Rect(cx - 13, y - 6, 26, 12);
-        dc.DrawRoundedRectangle(_control, _thumbPen, thumb, 2, 2);
-        dc.DrawLine(_accentPen, new Point(cx - 9, y), new Point(cx + 9, y));
+        double topY = Math.Min(y, midY);
+        double fillH = Math.Abs(y - midY);
+        if (fillH > 1 && IsEnabled)
+            dc.DrawRoundedRectangle(_activeFill, null, new Rect(cx - 1.5, topY, 3, fillH), 1.5, 1.5);
+
+        // 立体推子帽
+        var thumb = new Rect(cx - 13, y - 6.5, 26, 13);
+        dc.DrawRoundedRectangle(active && IsEnabled ? _thumbFillHover : _thumbFill, _thumbPen, thumb, 3, 3);
+        var gripPen = (Math.Abs(Value - DefaultValue) < 0.5 || active) ? _accentPen : _linePen;
+        double gy = Math.Round(y) + 0.5;
+        dc.DrawLine(gripPen, new Point(cx - 8, gy), new Point(cx + 8, gy));
         AutomationProperties.SetName(this, "Level");
     }
 }

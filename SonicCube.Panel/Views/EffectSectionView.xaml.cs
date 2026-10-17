@@ -83,11 +83,11 @@ public partial class EffectSectionView : UserControl
         var b = new System.Windows.Controls.Primitives.ToggleButton
         {
             Content = Loc.Get(key),
-            Style = (Style)FindResource("ChannelToggle"),
-            Width = 68,
-            Height = 32,
+            Style = (Style)FindResource("NavModuleToggle"),
+            Width = 72,
+            Height = 36,
             FontSize = 12,
-            Margin = new Thickness(0, 0, 0, 8),
+            Margin = new Thickness(0, 3, 0, 3),
             Tag = uiIndex,
         };
         b.Click += (_, _) => { if (!_suppressTab) SelectModule(uiIndex); };
@@ -158,35 +158,46 @@ public partial class EffectSectionView : UserControl
     private UIElement CreateHpf()
     {
         // HPF 选择:每通道 75Hz / 100Hz 互斥(LOWCUT)。
-        var panel = new StackPanel { Margin = new Thickness(4) };
+        var panel = new StackPanel { Margin = new Thickness(12, 16, 12, 16), VerticalAlignment = VerticalAlignment.Center };
         _hpfBtns = new System.Windows.Controls.Primitives.ToggleButton[2, 2];
         for (int ch = 0; ch < 2; ch++)
         {
-            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 4) };
+            var card = new Border
+            {
+                Style = (Style)FindResource("ChannelHeaderBadge"),
+                Padding = new Thickness(12, 8, 12, 8),
+                Margin = new Thickness(0, 4, 0, 4),
+            };
+            var row = new Grid();
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             var label = new TextBlock
             {
                 Style = (Style)FindResource("TitleText"),
-                Width = 90,
+                HorizontalAlignment = HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Center,
+                Text = Loc.Get(ch == 0 ? "ChMic1" : "ChLineInst2"),
             };
-            label.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding());
-            label.Text = Loc.Get(ch == 0 ? "ChMic1" : "ChLineInst2");
             row.Children.Add(label);
+            var btnHost = new StackPanel { Orientation = Orientation.Horizontal };
+            Grid.SetColumn(btnHost, 1);
             for (int opt = 0; opt < 2; opt++)
             {
                 var b = new System.Windows.Controls.Primitives.ToggleButton
                 {
                     Content = opt == 0 ? "75 Hz" : "100 Hz",
                     Style = (Style)FindResource("ChannelToggle"),
-                    Width = 70,
-                    Margin = new Thickness(4, 0, 0, 0),
+                    Width = 78,
+                    Margin = new Thickness(6, 0, 0, 0),
                 };
                 int cch = ch, copt = opt;
                 b.Click += (_, _) => OnHpfSelected(cch, copt);
                 _hpfBtns[ch, opt] = b;
-                row.Children.Add(b);
+                btnHost.Children.Add(b);
             }
-            panel.Children.Add(row);
+            row.Children.Add(btnHost);
+            card.Child = row;
+            panel.Children.Add(card);
         }
         return panel;
     }

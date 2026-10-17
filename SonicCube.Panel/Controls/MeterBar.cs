@@ -7,14 +7,12 @@ using SonicCube.Protocol.Models;
 namespace SonicCube.Panel.Controls;
 
 /// <summary>
-/// 双声道电平表(自绘,DrawingContext)。
+/// 双声道电平表(自绘,DrawingContext,Fluent 2 风格)。
 /// 输入为协议 dB;内部以“满刻度比例 0..1”渲染(dB≤-60→0,dB≥0→1)。
 /// 快攻慢放 + 峰值保持:按实际经过时间计算,不按帧数。
 /// 所有实例统一由静态 CompositionTarget.Rendering 驱动(单一订阅,窗口关闭时解除)。
 /// 最小化/不可见时暂停绘制。
 /// 视觉:分段渐变电平条(绿→黄→红,分界处颜色连续)、右侧 dB 刻度尺(数字 + 刻度线)、双段式峰值保持线。
-/// 音频级渐变用 DrawingBrush 平铺实现,电平段区域无自身像素级采样,
-/// 触发不了 WPF 的可见性优化,而 DrawingBrush 分支已实测证明不会被该机制逐帧清空。
 /// </summary>
 public sealed class MeterBar : FrameworkElement
 {
@@ -26,6 +24,7 @@ public sealed class MeterBar : FrameworkElement
     public MeterBar()
     {
         SnapsToDevicePixels = true;
+        UseLayoutRounding = true;
         _display = new double[2];
         _peak = new double[2];
         _peakHoldUntil = new DateTime[2];
@@ -160,7 +159,7 @@ public sealed class MeterBar : FrameworkElement
     }
 
     // ── 画刷缓存(资源查找走 Application.Resources,固定引用,实例间共享)──
-    private Brush? _track, _trackBorder, _tick, _peakWhite, _peakWarn, _scaleText, _scaleTextHi;
+    private Brush? _track, _tick, _peakWhite, _peakWarn, _scaleText, _scaleTextHi;
     private Pen? _trackPen, _tickPen, _peakWhitePen, _peakWarnPen;
     private Typeface? _typeface;
     private LinearGradientBrush? _fill;      // 电平条渐变(绿→黄→红,分界连续)
@@ -170,22 +169,22 @@ public sealed class MeterBar : FrameworkElement
     {
         if (_fill is not null) return;
         _track = (Brush)FindResource("BrushMeterTrack");
-        _trackBorder = (Brush)FindResource("BrushBorder");
         _tick = (Brush)FindResource("BrushTickMajor");
         _peakWhite = (Brush)FindResource("BrushThumbLine");
         _peakWarn = (Brush)FindResource("BrushWarn");
         _scaleText = (Brush)FindResource("BrushTextDisabled");
         _scaleTextHi = (Brush)FindResource("BrushTextSecondary");
-        _trackPen = new Pen(_trackBorder, 1);
+
+        var trackBorder = new SolidColorBrush(Color.FromArgb(0x20, 0xFF, 0xFF, 0xFF));
+        trackBorder.Freeze();
+        _trackPen = new Pen(trackBorder, 1);
         _tickPen = new Pen(_tick, 1);
-        _peakWhitePen = new Pen(_peakWhite, 1);
-        _peakWarnPen = new Pen(_peakWarn, 1);
+        _peakWhitePen = new Pen(_peakWhite, 1.2);
+        _peakWarnPen = new Pen(_peakWarn, 1.4);
         _trackPen.Freeze(); _tickPen.Freeze(); _peakWhitePen.Freeze(); _peakWarnPen.Freeze();
-        _typeface = new Typeface(new FontFamily("Segoe UI"), FontStyles.Normal, FontWeights.Regular, FontStretches.Normal);
+        _typeface = new Typeface(new FontFamily("Cascadia Mono, Bahnschrift, Segoe UI"), FontStyles.Normal, FontWeights.Medium, FontStretches.Normal);
 
         // 电平条渐变:坐标映射到整根轨道(0=底/-60dB,1=顶/0dB)。
-        // 分界 -12/-3dB 用成对 GradientStop 让颜色连续过渡,消除旧版纯色分段的硬边界;
-        // 亮度乘 1.2 抵消主题色的去饱和,恢复暗色主题下的鲜亮感。
         var green = (Color)FindResource("ColorMeterGreen");
         var yellow = (Color)FindResource("ColorMeterYellow");
         var red = (Color)FindResource("ColorMeterRed");
@@ -194,26 +193,28 @@ public sealed class MeterBar : FrameworkElement
         var stops = new GradientStopCollection
         {
             new(Scale(green, 1.05), 0),
-            new(Scale(green, 1.1), yMid - 0.035),
+            new(Scale(green, 1.12), yMid - 0.035),
             new(Scale(yellow, 1.05), yMid + 0.035),
-            new(Scale(yellow, 1.1), yTop - 0.035),
-            new(Scale(red, 1.05), yTop + 0.035),
+            new(Scale(yellow, 1.12), yTop - 0.035),
+            new(Scale(red, 1.08), yTop + 0.035),
             new(Scale(red, 1.25), 1),
         };
         _fill = new LinearGradientBrush(stops, new Point(0, 1), new Point(0, 0));
         _fill.Freeze();
 
-        // 分段横纹:3px 着色 + 2px 留空,沿电平条平铺(坐标相对轨道全长)。
-        var seg = new GeometryDrawing
-        {
-            Geometry = new RectangleGeometry(new Rect(0, 3, 1, 2)),
-            Brush = _track,
-        };
-        seg.Freeze();
-        _segments = new DrawingBrush(seg)
+        // 分段横纹:0..3px 透明露出下层渐变色,3..4.5px 用轨道深色画横纹间隙。
+        // 注意:DrawingBrush 的 Viewbox 默认按 BoundingBox 归一化,所以必须同时放置透明底框(0,0,1,4.5)
+        // 或显式指定 Viewbox=(0,0,1,4.5)+Absolute,否则单个子矩形会被 Stretch.Fill 拉伸铺满整个 Viewport!
+        var group = new DrawingGroup();
+        group.Children.Add(new GeometryDrawing(Brushes.Transparent, null, new RectangleGeometry(new Rect(0, 0, 1, 4.5))));
+        group.Children.Add(new GeometryDrawing(_track, null, new RectangleGeometry(new Rect(0, 3, 1, 1.5))));
+        group.Freeze();
+        _segments = new DrawingBrush(group)
         {
             TileMode = TileMode.Tile,
-            Viewport = new Rect(0, 0, 1, 5),
+            Viewbox = new Rect(0, 0, 1, 4.5),
+            ViewboxUnits = BrushMappingMode.Absolute,
+            Viewport = new Rect(0, 0, 1, 4.5),
             ViewportUnits = BrushMappingMode.Absolute,
             Stretch = Stretch.Fill,
         };
@@ -243,18 +244,20 @@ public sealed class MeterBar : FrameworkElement
         EnsureBrushes();
 
         // 布局:[ 电平条 L/R | 刻度区(刻度线 + dB 数字) ]
-        // 数字贴刻度线右侧、按刻度 y 垂直居中;轨道上下留出半个字高,端点 0/-60 不再外溢。
         const double scaleW = 20;
         double barsW = Math.Max(4, w - scaleW);
         const double gap = 2;
         double barW = (barsW - gap) / 2;
         double pad = ScaleLabel(0, _scaleText!).Height / 2;
         double yTop = pad, trackH = Math.Max(4, h - pad * 2);
-        var track = new Rect(0, yTop, barsW, trackH);
         dc.PushGuidelineSet(VerticalGuidelines(0, barW, barW + gap, barsW, w));
 
-        // 轨道(深色槽 + 细边框)
-        dc.DrawRectangle(_track, _trackPen, track);
+        // 分别绘制 L / R 两个圆角槽(更具现代数字调音台 LED 柱质感)
+        for (int i = 0; i < 2; i++)
+        {
+            var barSlot = new Rect(i * (barW + gap), yTop, barW, trackH);
+            dc.DrawRoundedRectangle(_track, _trackPen, barSlot, 2, 2);
+        }
 
         // dB 刻度:数字右对齐于刻度区;-3/-12 即黄/红分界,数字提亮呼应颜色阈值
         for (int i = 0; i < ScaleDbs.Length; i++)
@@ -262,7 +265,7 @@ public sealed class MeterBar : FrameworkElement
             double db = ScaleDbs[i];
             double y = yTop + trackH * (1 - DbToNorm(db));
             double ys = Math.Round(y) + 0.5;
-            dc.DrawLine(_tickPen, new Point(barsW, ys), new Point(barsW + 3, ys));
+            dc.DrawLine(_tickPen, new Point(barsW + 1, ys), new Point(barsW + 4, ys));
             bool hi = db is 0.0 or -3 or -12;
             var t = ScaleLabel(i, hi ? _scaleTextHi! : _scaleText!);
             dc.DrawText(t, new Point(w - t.Width, y - t.Height / 2));
@@ -270,7 +273,7 @@ public sealed class MeterBar : FrameworkElement
 
         for (int i = 0; i < 2; i++)
         {
-            var bar = new Rect(i * (barW + gap), yTop, barW, trackH);
+            var bar = new Rect(i * (barW + gap) + 0.5, yTop, Math.Max(1, barW - 1), trackH);
             DrawLevel(dc, bar, _display[i], trackH);
             DrawPeak(dc, bar, _peak[i], trackH);
         }
@@ -285,19 +288,18 @@ public sealed class MeterBar : FrameworkElement
         double fillH = Math.Round(h * level);
         if (fillH < 1) return;
 
-        // 用 clip 限制在填充段区域,然后画全高渐变矩形,实现"取渐变当前段"
-        dc.PushClip(new RectangleGeometry(new Rect(bar.X, bar.Bottom - fillH, bar.Width, fillH)));
-        dc.DrawRectangle(_fill, null, new Rect(bar.X, 0, bar.Width, h));
+        // 用 clip 限制在填充段区域,画全高渐变矩形并叠一层分段横纹
+        dc.PushClip(new RectangleGeometry(new Rect(bar.X, bar.Bottom - fillH, bar.Width, fillH), 1.5, 1.5));
+        dc.DrawRectangle(_fill, null, new Rect(bar.X, bar.Y, bar.Width, h));
+        dc.DrawRectangle(_segments, null, new Rect(bar.X, bar.Y, bar.Width, h));
         dc.Pop();
     }
 
     private void DrawPeak(DrawingContext dc, Rect bar, double peak, double h)
     {
         if (peak <= 0.001) return;
-        double py = Math.Round(h * (1 - peak)) + 0.5;
+        double py = bar.Y + Math.Round(h * (1 - peak)) + 0.5;
         var pen = peak >= 1 - 3.0 / 60 ? _peakWarnPen : _peakWhitePen;
-        // 双段式:比单像素线更醒目,宽度留出 1px 内缩
-        dc.DrawLine(pen, new Point(bar.X + 1, py - 1), new Point(bar.Right - 1, py - 1));
-        dc.DrawLine(pen, new Point(bar.X + 1, py + 1), new Point(bar.Right - 1, py + 1));
+        dc.DrawLine(pen, new Point(bar.X + 0.5, py), new Point(bar.Right - 0.5, py));
     }
 }

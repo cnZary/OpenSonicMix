@@ -8,8 +8,8 @@ using System.Windows.Media;
 namespace SonicCube.Panel.Controls;
 
 /// <summary>
-/// 参数旋钮(自绘)。拖拽步进 = 0.01×(max-min),取整到 step;滚轮 ±step;
-/// Alt+单击或双击回默认值;点击数值文本可键盘输入(clamp 到 min/max)。
+/// 参数旋钮(自绘,Fluent 2 风格)。拖拽步进 = 0.01×(max-min),取整到 step;滚轮 ±step;
+/// Alt+单击或双击回默认值;点击数值区域可键盘输入(clamp 到 min/max)。
 /// 值直发协议原值,无额外换算(换算在调用方)。
 /// </summary>
 public sealed class KnobControl : FrameworkElement
@@ -21,7 +21,10 @@ public sealed class KnobControl : FrameworkElement
 
     public KnobControl()
     {
-        Width = 74; Height = 98;
+        Width = 76; Height = 100;
+        SnapsToDevicePixels = true;
+        UseLayoutRounding = true;
+        Cursor = Cursors.Hand;
         _editor.Visibility = Visibility.Collapsed;
         _editor.TextAlignment = TextAlignment.Center;
         _editor.LostFocus += (_, _) => CommitEditor();
@@ -103,6 +106,18 @@ public sealed class KnobControl : FrameworkElement
         ValueCommitted?.Invoke(Value);
     }
 
+    protected override void OnMouseEnter(MouseEventArgs e)
+    {
+        base.OnMouseEnter(e);
+        InvalidateVisual();
+    }
+
+    protected override void OnMouseLeave(MouseEventArgs e)
+    {
+        base.OnMouseLeave(e);
+        InvalidateVisual();
+    }
+
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonDown(e);
@@ -111,7 +126,7 @@ public sealed class KnobControl : FrameworkElement
         if (Keyboard.Modifiers.HasFlag(ModifierKeys.Alt)) { ResetToDefault(); e.Handled = true; return; }
         // 命中数值区域→进入编辑
         var p = e.GetPosition(this);
-        if (p.Y > ActualHeight - 20)
+        if (p.Y > ActualHeight - 22)
         {
             BeginEdit(e);
             return;
@@ -120,6 +135,7 @@ public sealed class KnobControl : FrameworkElement
         CaptureMouse();
         _dragStartY = p.Y;
         _dragStartValue = Value;
+        InvalidateVisual();
         e.Handled = true;
     }
 
@@ -142,6 +158,7 @@ public sealed class KnobControl : FrameworkElement
         _dragging = false;
         ReleaseMouseCapture();
         SuppressEchoBriefly();
+        InvalidateVisual();
         ValueCommitted?.Invoke(Value);
         e.Handled = true;
     }
@@ -187,9 +204,11 @@ public sealed class KnobControl : FrameworkElement
         }
         if (_editor.Parent is System.Windows.Controls.Panel panel)
         {
-            var pos = TranslatePoint(new Point(0, ActualHeight - 20), panel);
-            _editor.Width = ActualWidth;
-            _editor.Height = 18;
+            var pos = TranslatePoint(new Point(4, ActualHeight - 20), panel);
+            _editor.Width = Math.Max(36, ActualWidth - 8);
+            _editor.Height = 20;
+            _editor.FontSize = 11;
+            _editor.Padding = new Thickness(2, 0, 2, 0);
             _editor.Margin = new Thickness(pos.X, pos.Y, 0, 0);
             _editor.HorizontalAlignment = HorizontalAlignment.Left;
             _editor.VerticalAlignment = VerticalAlignment.Top;
@@ -218,55 +237,126 @@ public sealed class KnobControl : FrameworkElement
         _editor.Visibility = Visibility.Collapsed;
     }
 
+    // ── 缓存资源 ──
+    private Brush? _panelDeep, _accent, _accentHover, _off, _textPrimary, _textSecondary, _textDisabled, _pillFill;
+    private LinearGradientBrush? _capFill, _capFillHover, _capElevationStroke;
+    private Pen? _trackArcPen, _activeArcPen, _hoverArcPen, _capBorderPen, _pillBorderPen, _tickDotPen;
+    private Typeface? _labelTypeface, _valueTypeface;
+
+    private void EnsureResources()
+    {
+        if (_capFill is not null) return;
+        _panelDeep = (Brush)FindResource("BrushPanelDeep");
+        _accent = (Brush)FindResource("BrushAccent");
+        _accentHover = (Brush)FindResource("BrushAccentHover");
+        _off = (Brush)FindResource("BrushOff");
+        _textPrimary = (Brush)FindResource("BrushText");
+        _textSecondary = (Brush)FindResource("BrushTextSecondary");
+        _textDisabled = (Brush)FindResource("BrushTextDisabled");
+
+        _pillFill = new SolidColorBrush(Color.FromArgb(0x88, 0x16, 0x16, 0x1A));
+        _pillFill.Freeze();
+        var pillBorderBrush = new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF));
+        pillBorderBrush.Freeze();
+        _pillBorderPen = new Pen(pillBorderBrush, 1);
+        _pillBorderPen.Freeze();
+
+        _capFill = new LinearGradientBrush(
+            (Color)FindResource("ColorThumbTop"),
+            (Color)FindResource("ColorThumbBottom"), 90);
+        _capFill.Freeze();
+
+        _capFillHover = new LinearGradientBrush(
+            Color.FromRgb(0x58, 0x58, 0x62),
+            Color.FromRgb(0x3C, 0x3C, 0x44), 90);
+        _capFillHover.Freeze();
+
+        _capElevationStroke = new LinearGradientBrush(
+            Color.FromArgb(0x48, 0xFF, 0xFF, 0xFF),
+            Color.FromArgb(0x40, 0x00, 0x00, 0x00), 90);
+        _capElevationStroke.Freeze();
+        _capBorderPen = new Pen(_capElevationStroke, 1.2);
+        _capBorderPen.Freeze();
+
+        _trackArcPen = new Pen(_off, 3) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+        _activeArcPen = new Pen(_accent, 3) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+        _hoverArcPen = new Pen(_accentHover, 3.2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+        _trackArcPen.Freeze(); _activeArcPen.Freeze(); _hoverArcPen.Freeze();
+
+        var tickBrush = new SolidColorBrush(Color.FromArgb(0x45, 0xFF, 0xFF, 0xFF));
+        tickBrush.Freeze();
+        _tickDotPen = new Pen(tickBrush, 1);
+        _tickDotPen.Freeze();
+
+        _labelTypeface = new Typeface(new FontFamily("Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"), FontStyles.Normal, FontWeights.Medium, FontStretches.Normal);
+        _valueTypeface = new Typeface(new FontFamily("Cascadia Mono, Bahnschrift, Consolas, Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
+    }
+
     protected override void OnRender(DrawingContext dc)
     {
         double w = ActualWidth, h = ActualHeight;
         if (w < 4 || h < 4) return;
-        double nameH = 14, valueH = 18;
-        double knobH = h - nameH - valueH;
+        EnsureResources();
+
+        bool active = _dragging || IsMouseOver;
+        double nameH = 15, valueH = 20;
+        double knobH = Math.Max(20, h - nameH - valueH);
         double cx = w / 2, cy = nameH + knobH / 2;
-        double radius = Math.Min(w, knobH) / 2 - 3;
+        double outerRadius = Math.Min(w, knobH) / 2 - 2;
+        double arcRadius = outerRadius - 2;
+        double capRadius = Math.Max(6, arcRadius - 5.5);
 
-        // 名称(上)
-        DrawText(dc, ParamName, new Rect(0, 0, w, nameH), "BrushTextSecondary", 11);
+        // 1. 顶部参数名称
+        if (!string.IsNullOrEmpty(ParamName))
+            DrawText(dc, ParamName, new Rect(0, 0, w, nameH), IsEnabled ? _textSecondary! : _textDisabled!, _labelTypeface!, 10.5);
 
-        // 底盘
-        var body = (Brush)FindResource("BrushControl");
-        var border = (Brush)FindResource("BrushBorderLight");
-        dc.DrawEllipse(body, new Pen(border, 1), new Point(cx, cy), radius, radius);
+        // 2. 底座深色阴影环
+        dc.DrawEllipse(_panelDeep, null, new Point(cx, cy), capRadius + 2, capRadius + 2);
 
+        // 3. 270° 轨道弧 + 值弧 (圆头 PenLineCap.Round)
         double t = Maximum > Minimum ? (Value - Minimum) / (Maximum - Minimum) : 0;
         t = Math.Clamp(t, 0, 1);
 
-        DrawArc(dc, cx, cy, radius - 2, 135, 270, new Pen((Brush)FindResource("BrushOff"), 3));
-        if (t > 0.002)
-            DrawArc(dc, cx, cy, radius - 2, 135, 270 * t, new Pen((Brush)FindResource("BrushAccent"), 3));
+        DrawArc(dc, cx, cy, arcRadius, 135, 270, _trackArcPen!);
+        if (t > 0.003 && IsEnabled)
+            DrawArc(dc, cx, cy, arcRadius, 135, 270 * t, active ? _hoverArcPen! : _activeArcPen!);
 
+        // 4. 旋钮立体帽 (Fluent 2 Elevation 渐变 + 顶亮底暗描边)
+        dc.DrawEllipse(active && IsEnabled ? _capFillHover : _capFill, _capBorderPen, new Point(cx, cy), capRadius, capRadius);
+
+        // 5. 指针线 + 中心轴心
         double ang = (135 + 270 * t) * Math.PI / 180.0;
-        var pOuter = new Point(cx + Math.Cos(ang) * (radius - 6), cy + Math.Sin(ang) * (radius - 6));
-        var pInner = new Point(cx + Math.Cos(ang) * (radius * 0.25), cy + Math.Sin(ang) * (radius * 0.25));
-        dc.DrawLine(new Pen(IsEnabled ? Brushes.White : (Brush)FindResource("BrushTextDisabled"), 2.5), pInner, pOuter);
-        dc.DrawEllipse((Brush)FindResource("BrushPanelDeep"), null, new Point(cx, cy), 3.5, 3.5);
+        var pOuter = new Point(cx + Math.Cos(ang) * (capRadius - 3), cy + Math.Sin(ang) * (capRadius - 3));
+        var pInner = new Point(cx + Math.Cos(ang) * (capRadius * 0.28), cy + Math.Sin(ang) * (capRadius * 0.28));
+        var pointerBrush = !IsEnabled ? _textDisabled! : (active ? _accentHover! : Brushes.White);
+        var pointerPen = new Pen(pointerBrush, 2.2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+        dc.DrawLine(pointerPen, pInner, pOuter);
+        dc.DrawEllipse(_panelDeep, null, new Point(cx, cy), 3.0, 3.0);
 
-        // 数值(下)
+        // 6. 底部数值读数胶囊 (Readout Pill)
         string txt = Step >= 1 ? Value.ToString("0") : Value.ToString("0.##");
-        DrawText(dc, txt, new Rect(0, h - valueH, w, valueH), "BrushText", 12);
+        double pillW = Math.Min(w - 6, Math.Max(38, txt.Length * 7.5 + 14));
+        var pillRect = new Rect((w - pillW) / 2, h - valueH + 1, pillW, valueH - 2);
+        dc.DrawRoundedRectangle(_pillFill, _pillBorderPen, pillRect, 3.5, 3.5);
+        DrawText(dc, txt, pillRect, IsEnabled ? _textPrimary! : _textDisabled!, _valueTypeface!, 11);
 
         AutomationProperties.SetName(this, string.IsNullOrEmpty(ParamName) ? "Knob" : ParamName);
     }
 
-    private void DrawText(DrawingContext dc, string text, Rect area, string brushKey, double size)
+    private void DrawText(DrawingContext dc, string text, Rect area, Brush brush, Typeface typeface, double size)
     {
-        var brush = (Brush)FindResource(brushKey);
         var ft = new FormattedText(text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-            new Typeface("Segoe UI"), size, brush, VisualTreeHelper.GetDpi(this).PixelsPerDip);
-        ft.MaxTextWidth = area.Width;
+            typeface, size, brush, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        ft.MaxTextWidth = Math.Max(4, area.Width);
+        ft.MaxLineCount = 1;
+        ft.Trimming = TextTrimming.CharacterEllipsis;
         dc.DrawText(ft, new Point(area.X + (area.Width - ft.Width) / 2, area.Y + (area.Height - ft.Height) / 2));
     }
 
     private static void DrawArc(DrawingContext dc, double cx, double cy, double r, double startDeg, double sweepDeg, Pen pen)
     {
-        int segs = Math.Max(2, (int)(Math.Abs(sweepDeg) / 6));
+        if (r <= 1) return;
+        int segs = Math.Max(2, (int)(Math.Abs(sweepDeg) / 5));
         double a0 = startDeg * Math.PI / 180.0;
         var geo = new StreamGeometry();
         using (var ctx = geo.Open())

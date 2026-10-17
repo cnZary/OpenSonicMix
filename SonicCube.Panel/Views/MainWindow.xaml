@@ -3,11 +3,14 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:v="clr-namespace:SonicCube.Panel.Views"
         Title="SonicCubePanel"
-        Width="1150" Height="880"
-        MinWidth="1080" MinHeight="700"
+        Width="1180" Height="880"
+        MinWidth="1080" MinHeight="720"
         Background="{StaticResource BrushWindow}"
+        TextOptions.TextFormattingMode="Display"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
         WindowStartupLocation="CenterScreen">
-  <Grid Margin="8">
+  <Grid Margin="10">
     <Grid.RowDefinitions>
       <RowDefinition Height="*"/>      <!-- 主工作区 -->
       <RowDefinition Height="Auto"/>   <!-- 底部全局控制条 -->
@@ -16,10 +19,10 @@
     <!-- 主工作区 -->
     <Grid Grid.Row="0">
       <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="170" MinWidth="150"/>   <!-- MIC 1 (~15%) -->
-        <ColumnDefinition Width="170" MinWidth="150"/>   <!-- LINE/INST 2 (~15%) -->
+        <ColumnDefinition Width="174" MinWidth="154"/>   <!-- MIC 1 (~15%) -->
+        <ColumnDefinition Width="174" MinWidth="154"/>   <!-- LINE/INST 2 (~15%) -->
         <ColumnDefinition Width="*" MinWidth="480"/>     <!-- 中央 (~52%) -->
-        <ColumnDefinition Width="185" MinWidth="170"/>   <!-- 主输出 (~16%) -->
+        <ColumnDefinition Width="190" MinWidth="172"/>   <!-- 主输出 (~16%) -->
       </Grid.ColumnDefinitions>
 
       <Border x:Name="Mic1Host" Grid.Column="0" Margin="0,0,4,0"/>
@@ -40,7 +43,7 @@
           </Grid.ColumnDefinitions>
           <Border x:Name="UsbHost" Grid.Column="0" Margin="0,0,4,0"/>
           <Border x:Name="OtgHost" Grid.Column="1" Margin="4,0,4,0"/>
-          <v:ReverbView x:Name="Rvb" Grid.Column="2" Width="160" Margin="4,0,0,0"/>
+          <v:ReverbView x:Name="Rvb" Grid.Column="2" Width="168" Margin="4,0,0,0"/>
         </Grid>
       </Grid>
 
@@ -48,6 +51,6 @@
     </Grid>
 
     <!-- 底部全局控制条 -->
-    <v:BottomBarView x:Name="BottomBar" Grid.Row="1" Margin="0,6,0,0"/>
+    <v:BottomBarView x:Name="BottomBar" Grid.Row="1" Margin="0,8,0,0"/>
   </Grid>
 </Window>

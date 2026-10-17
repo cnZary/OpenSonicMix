@@ -130,10 +130,11 @@ public partial class SettingsWindow : Window
         {
             Content = Loc.Get("PhantomConsent"),
             Foreground = (System.Windows.Media.Brush)FindResource("BrushText"),
-            Margin = new Thickness(0, 12, 0, 12),
+            Style = (Style)FindResource("PlainCheck"),
+            Margin = new Thickness(0, 12, 0, 14),
         };
         var row = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-        var ok = new System.Windows.Controls.Button { Content = "OK", Width = 90, Margin = new Thickness(0, 0, 8, 0), IsEnabled = false, Style = (Style)FindResource("SubtleButton") };
+        var ok = new System.Windows.Controls.Button { Content = "OK", Width = 90, Margin = new Thickness(0, 0, 8, 0), IsEnabled = false, Style = (Style)FindResource("PrimaryButton") };
         var cancel = new System.Windows.Controls.Button { Content = Loc.Get("Cancel"), Width = 90, Style = (Style)FindResource("SubtleButton") };
         consent.Checked += (_, _) => ok.IsEnabled = true;
         consent.Unchecked += (_, _) => ok.IsEnabled = false;

@@ -7,15 +7,17 @@ using System.Windows.Media;
 namespace SonicCube.Panel.Controls;
 
 /// <summary>
-/// 声像 L-R 水平滑条(float -50~50 直发,无换算)。双击复位 0。
+/// 声像 L-R 水平滑条(float -50~50 直发,无换算,Fluent 2 风格)。双击复位 0。
 /// mono 关闭时由父级置 IsEnabled=false(禁用视觉与“关闭”区分:禁用=灰,关闭=未选中)。
 /// </summary>
 public sealed class PanSliderControl : FrameworkElement
 {
     public PanSliderControl()
     {
-        Height = 30;
+        Height = 32;
         SnapsToDevicePixels = true;
+        UseLayoutRounding = true;
+        Cursor = Cursors.Hand;
     }
 
     public static readonly DependencyProperty ValueProperty = DependencyProperty.Register(
@@ -50,27 +52,47 @@ public sealed class PanSliderControl : FrameworkElement
 
     private double XToValue(double x)
     {
-        double t = Math.Clamp((x - 8.0) / (ActualWidth - 16.0), 0, 1);
+        double t = Math.Clamp((x - 8.0) / Math.Max(10, ActualWidth - 16.0), 0, 1);
         return Math.Round(t * 100 - 50);
     }
 
     // ── 画笔/画刷缓存 ──
-    private Pen? _trackPen, _midPen, _thumbPen;
-    private Brush? _brushBorderLight, _brushAccent, _brushOff;
+    private Pen? _midPen, _thumbPen, _trackBorderPen;
+    private Brush? _trackBrush, _brushAccent, _brushAccentHover, _brushOff;
+    private Typeface? _typeface;
 
     private void EnsureResources()
     {
-        if (_trackPen is not null) return;
-        _brushBorderLight = (Brush)FindResource("BrushBorderLight");
+        if (_midPen is not null) return;
+        _trackBrush = (Brush)FindResource("BrushFaderTrack");
         _brushAccent = (Brush)FindResource("BrushAccent");
+        _brushAccentHover = (Brush)FindResource("BrushAccentHover");
         _brushOff = (Brush)FindResource("BrushOff");
-        _trackPen = new Pen(_brushBorderLight, 2);
-        _midPen = new Pen((Brush)FindResource("BrushBorder"), 1);
-        _thumbPen = new Pen(_brushBorderLight, 1);
-        _trackPen.Freeze(); _midPen.Freeze(); _thumbPen.Freeze();
+
+        var trackStroke = new SolidColorBrush(Color.FromArgb(0x24, 0xFF, 0xFF, 0xFF));
+        trackStroke.Freeze();
+        _trackBorderPen = new Pen(trackStroke, 1);
+        _trackBorderPen.Freeze();
+
+        _midPen = new Pen((Brush)FindResource("BrushTickMajor"), 1);
+        _thumbPen = new Pen((Brush)FindResource("BrushBorderLight"), 1);
+        _midPen.Freeze(); _thumbPen.Freeze();
+        _typeface = new Typeface(new FontFamily("Cascadia Mono, Bahnschrift, Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
     }
 
-    private double ValueToX(double v) => 8 + (v + 50) / 100.0 * (ActualWidth - 16);
+    private double ValueToX(double v) => 8 + (v + 50) / 100.0 * Math.Max(10, ActualWidth - 16);
+
+    protected override void OnMouseEnter(MouseEventArgs e)
+    {
+        base.OnMouseEnter(e);
+        InvalidateVisual();
+    }
+
+    protected override void OnMouseLeave(MouseEventArgs e)
+    {
+        base.OnMouseLeave(e);
+        InvalidateVisual();
+    }
 
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
@@ -88,6 +110,7 @@ public sealed class PanSliderControl : FrameworkElement
         _dragging = true;
         CaptureMouse();
         ApplyX(e.GetPosition(this).X);
+        InvalidateVisual();
         e.Handled = true;
     }
 
@@ -112,6 +135,7 @@ public sealed class PanSliderControl : FrameworkElement
         _dragging = false;
         ReleaseMouseCapture();
         SuppressEchoBriefly();
+        InvalidateVisual();
         ValueCommitted?.Invoke(Value);
         e.Handled = true;
     }
@@ -151,24 +175,39 @@ public sealed class PanSliderControl : FrameworkElement
     protected override void OnRender(DrawingContext dc)
     {
         double w = ActualWidth, h = ActualHeight;
-        if (w < 4 || h < 4) return;
+        if (w < 16 || h < 12) return;
         EnsureResources();
-        double cy = h / 2 + 4;
+        bool active = _dragging || IsMouseOver;
+        double cy = h - 9;
+        double midX = w / 2;
 
-        dc.DrawLine(_trackPen, new Point(8, cy), new Point(w - 8, cy));
-        // 中线
-        dc.DrawLine(_midPen, new Point(w / 2, cy - 5), new Point(w / 2, cy + 5));
-
-        double x = ValueToX(Value);
-        var thumbBrush = IsEnabled ? _brushAccent : _brushOff;
-        dc.DrawRoundedRectangle(thumbBrush, _thumbPen, new Rect(x - 6, cy - 8, 12, 16), 2, 2);
-
-        // 顶部 L / 值 / R
-        var brush = (Brush)FindResource(IsEnabled ? "BrushTextSecondary" : "BrushTextDisabled");
+        // 1. 顶部 L / 值 / R 标签
+        var labelBrush = (Brush)FindResource(IsEnabled ? "BrushTextSecondary" : "BrushTextDisabled");
+        var valBrush = (Brush)FindResource(IsEnabled ? "BrushText" : "BrushTextDisabled");
         string txt = Value == 0 ? "C" : (Value < 0 ? $"L{-Value:0}" : $"R{Value:0}");
-        DrawText(dc, "L", new Rect(0, 0, 12, 12), brush, 9);
-        DrawText(dc, "R", new Rect(w - 12, 0, 12, 12), brush, 9);
-        DrawText(dc, txt, new Rect(0, 0, w, 12), brush, 9);
+        DrawText(dc, "L", new Rect(2, 0, 14, 13), labelBrush, 9.5);
+        DrawText(dc, "R", new Rect(w - 16, 0, 14, 13), labelBrush, 9.5);
+        DrawText(dc, txt, new Rect(16, 0, w - 32, 13), valBrush, 10);
+
+        // 2. 凹槽圆角轨道 (高 4px)
+        dc.DrawRoundedRectangle(_trackBrush, _trackBorderPen, new Rect(8, cy - 2, w - 16, 4), 2, 2);
+
+        // 3. 中心刻度线
+        double ms = Math.Round(midX) + 0.5;
+        dc.DrawLine(_midPen, new Point(ms, cy - 6), new Point(ms, cy + 6));
+
+        // 4. 双极偏移填充(从中心 C 到当前位置 x)
+        double x = ValueToX(Value);
+        if (IsEnabled && Math.Abs(x - midX) > 1.5)
+        {
+            double left = Math.Min(x, midX);
+            double width = Math.Abs(x - midX);
+            dc.DrawRoundedRectangle(_brushAccent, null, new Rect(left, cy - 1.5, width, 3), 1.5, 1.5);
+        }
+
+        // 5. Fluent 2 圆角滑块帽
+        var thumbBrush = !IsEnabled ? _brushOff : (active ? _brushAccentHover : _brushAccent);
+        dc.DrawRoundedRectangle(thumbBrush, _thumbPen, new Rect(x - 5.5, cy - 6.5, 11, 13), 3, 3);
 
         AutomationProperties.SetName(this, "Pan");
     }
@@ -176,7 +215,7 @@ public sealed class PanSliderControl : FrameworkElement
     private void DrawText(DrawingContext dc, string text, Rect area, Brush brush, double size)
     {
         var ft = new FormattedText(text, CultureInfo.CurrentUICulture, FlowDirection.LeftToRight,
-            new Typeface("Segoe UI"), size, brush, VisualTreeHelper.GetDpi(this).PixelsPerDip);
+            _typeface!, size, brush, VisualTreeHelper.GetDpi(this).PixelsPerDip);
         dc.DrawText(ft, new Point(area.X + (area.Width - ft.Width) / 2, area.Y));
     }
 }

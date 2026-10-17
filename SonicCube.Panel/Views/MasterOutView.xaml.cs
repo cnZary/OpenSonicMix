@@ -51,6 +51,7 @@ public partial class MasterOutView : System.Windows.Controls.UserControl
 
     private void ApplyLocalization()
     {
+        MasterTitle.Text = Loc.Get("MasterOut");
         BtnDspRec.Content = Loc.Get("DspRec");
         BtnDspMon.Content = Loc.Get("DspMon");
         BtnMasterMute.Content = Loc.Get("MasterMute");

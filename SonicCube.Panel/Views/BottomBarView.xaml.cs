@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Media;
 using SonicCube.Panel.Localization;
 using SonicCube.Protocol.Models;
 
@@ -37,13 +38,23 @@ public partial class BottomBarView : UserControl
         _suppress = false;
     }
 
-    public void SetStatus(string text) => StatusText.Text = text;
+    public void SetStatus(string text)
+    {
+        StatusText.Text = text;
+        string brushKey = "BrushOn";
+        if (text == Loc.Get("DeviceDisconnected") || text.StartsWith(Loc.Get("Error"), StringComparison.OrdinalIgnoreCase))
+            brushKey = "BrushError";
+        else if (text == Loc.Get("TrayConnecting") || text.StartsWith(Loc.Get("Syncing"), StringComparison.OrdinalIgnoreCase) || text == Loc.Get("Simulated"))
+            brushKey = "BrushAmber";
+        if (TryFindResource(brushKey) is Brush b)
+            StatusDot.Fill = b;
+    }
 
     private void ApplyLocalization()
     {
         BtnEfx.Content = Loc.Get("Efx");
         BtnMonitor.Content = Loc.Get("Monitor");
         BtnOnAir.Content = Loc.Get("OnAir");
-        MenuBtn.Content = Loc.Get("Menu");
+        MenuBtn.Content = $"⚙  {Loc.Get("Menu")}";
     }
 }

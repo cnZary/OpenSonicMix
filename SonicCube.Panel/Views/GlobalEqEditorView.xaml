@@ -7,13 +7,27 @@
       <ColumnDefinition Width="*"/>
       <ColumnDefinition Width="Auto"/>
     </Grid.ColumnDefinitions>
-    <c:GraphicEqControl x:Name="Eq" Grid.Column="0"/>
+    <Border Grid.Column="0" Background="{StaticResource BrushMeterTrack}" BorderBrush="#18FFFFFF"
+            BorderThickness="1" CornerRadius="6" ClipToBounds="True">
+      <c:GraphicEqControl x:Name="Eq"/>
+    </Border>
     <!-- 右侧总音量(UI -50~+50 ↔ 协议 0~100) -->
-    <StackPanel Grid.Column="1" Width="64" Margin="6,0,0,0">
-      <TextBlock x:Name="VolLabel" Style="{StaticResource LabelText}" Text="VOL"/>
-      <c:LinearFaderControl x:Name="Vol" Width="36" Height="150" HorizontalAlignment="Center"/>
-      <TextBlock x:Name="VolValue" Style="{StaticResource ValueText}"/>
-    </StackPanel>
-    <Border x:Name="Mask" Grid.ColumnSpan="2" Background="#AA141418" Visibility="Collapsed" Panel.ZIndex="10"/>
+    <Border Grid.Column="1" Background="#12FFFFFF" BorderBrush="#14FFFFFF"
+            BorderThickness="1" CornerRadius="6" Padding="6,6,6,6" Width="68" Margin="8,0,0,0">
+      <StackPanel VerticalAlignment="Center">
+        <TextBlock x:Name="VolLabel" Style="{StaticResource SectionCaptionText}" Text="VOL" Margin="0,0,0,4"/>
+        <c:LinearFaderControl x:Name="Vol" Width="40" Height="118" HorizontalAlignment="Center"/>
+        <Border Style="{StaticResource ReadoutPill}" Margin="0,4,0,0">
+          <TextBlock x:Name="VolValue" Style="{StaticResource ValueText}"/>
+        </Border>
+      </StackPanel>
+    </Border>
+    <Border x:Name="Mask" Grid.ColumnSpan="2" Background="#B816161A" CornerRadius="6" Visibility="Collapsed" Panel.ZIndex="10">
+      <Border Background="#26FFFFFF" BorderBrush="#28FFFFFF" BorderThickness="1" CornerRadius="4"
+              Padding="12,4" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <TextBlock Text="BYPASS" FontFamily="{StaticResource FontMono}" FontSize="11" FontWeight="SemiBold"
+                   Foreground="{StaticResource BrushTextSecondary}"/>
+      </Border>
+    </Border>
   </Grid>
 </UserControl>
