@@ -85,9 +85,23 @@ public sealed class PresetState
                 }
                 break;
             case Commands.CommandAddress.MuteSwitch:
-                if (InRange(location, 4)) MuteSw[location] = PayloadReadInt(data); break;
+                if (InRange(location, 4))
+                {
+                    int v = PayloadReadInt(data);
+                    MuteSw[location] = v;
+                    // 输入通道 0/1 的 MUTE 与 SOLO 硬件互斥:置 MUTE=1 时硬件自动关 SOLO 但不回 SOLO 包
+                    if (location < 2 && v == 1) SoloSw[location] = 0;
+                }
+                break;
             case Commands.CommandAddress.SoloSwitch:
-                if (InRange(location, 2)) SoloSw[location] = PayloadReadInt(data); break;
+                if (InRange(location, 2))
+                {
+                    int v = PayloadReadInt(data);
+                    SoloSw[location] = v;
+                    // 输入通道 0/1 的 SOLO 与 MUTE 硬件互斥:置 SOLO=1 时硬件自动关 MUTE
+                    if (v == 1) MuteSw[location] = 0;
+                }
+                break;
             case Commands.CommandAddress.VolumePot:
                 if (InRange(location, 4)) VolPot[location] = PayloadReadFloat(data); break;
             case Commands.CommandAddress.Phase:

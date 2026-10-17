@@ -33,6 +33,7 @@ public sealed class GraphicEqControl : FrameworkElement
 
     public void SetPoint(int i, double freq, double gain)
     {
+        if (_dragIndex == i) return;
         _freq[i] = Math.Clamp(freq, 20, 20000);
         _gain[i] = Math.Clamp(gain, -20, 20);
         InvalidateVisual();

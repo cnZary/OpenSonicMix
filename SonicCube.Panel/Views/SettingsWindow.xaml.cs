@@ -29,6 +29,7 @@ public partial class SettingsWindow : Window
         LoadFrom(current);
         ApplyLocalization();
         Loc.LanguageChanged += ApplyLocalization;
+        Closed += (_, _) => Loc.LanguageChanged -= ApplyLocalization;
         WireEvents();
     }
 

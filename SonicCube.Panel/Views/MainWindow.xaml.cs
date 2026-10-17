@@ -94,6 +94,10 @@ public partial class MainWindow : Window
         _preset.Send[0] = 0.25f; _preset.Send[1] = 0.1f;
         _preset.Phase[0] = -50; _preset.Phase[1] = 50;
         _preset.FxAlg[0] = 1; _preset.FxAlg[2] = 0x07000027; _preset.FxAlg[3] = 0x01000035; _preset.FxAlg[4] = 0x0C000000;
+        foreach (var mod in FxCatalog.Modules)
+            foreach (var alg in mod.Algorithms)
+                foreach (var param in alg.Params)
+                    _preset.FxParaVal[mod.ModuleId * PresetState.ParamsPerModule + param.AlgId] = param.Default;
         ApplySnapshotToUi();
         UpdateUiEnabled();
         // 模拟电平推送
@@ -153,7 +157,7 @@ public partial class MainWindow : Window
             RunOnUi(() => ApplySettings(settings));
         }
         if (st != null) RunOnUi(() => ApplySnapshot(st));
-        _synced = st != null;
+        _synced = st != null && st.Connected;
         RunOnUi(() =>
         {
             UpdateUiEnabled();
@@ -169,9 +173,10 @@ public partial class MainWindow : Window
             }
         });
 
-        // Panel 拉起 Tray 的竞态:Panel 可能在 Tray IPC/设备握手完成前连接,get_state 拿到空/超时。
-        // 兜底:快照缺失或版本为 0 时,持续重试拉取直到拿到真实快照。
-        if (st == null || _client!.StateVersion == 0)
+        // Panel 拉起 Tray 或低占用模式唤醒设备的竞态:Panel 可能在设备握手完成前连接,
+        // get_state 拿到 Connected=false 的全零默认快照(即使之前连接过使 StateVersion>0)。
+        // 兜底:快照缺失、未连接或版本为 0 时,持续重试拉取直到拿到已连接设备的真实快照。
+        if (st == null || !st.Connected || _client!.StateVersion == 0)
         {
             _ = RefresWhenReadyAsync();
         }
@@ -192,12 +197,17 @@ public partial class MainWindow : Window
             }
             else
             {
-                // 已连接则立即拉一次快照(首轮无等待),版本为 0 说明设备握手未完成,下轮再试。
+                // 已连接则立即拉一次快照(首轮无等待),设备尚未握手完成(Connected=false)则下轮再试。
                 var st = await _client.GetStateDirectAsync();
-                if (st != null && _client.StateVersion > 0)
+                if (st is { Connected: true } && _client.StateVersion > 0)
                 {
-                    RunOnUi(() => ApplySnapshot(st));
-                    RunOnUi(() => { _synced = true; UpdateUiEnabled(); UpdateStatus(st.Connected); });
+                    RunOnUi(() =>
+                    {
+                        ApplySnapshot(st);
+                        _synced = true;
+                        UpdateUiEnabled();
+                        UpdateStatus(st.Connected);
+                    });
                     return;
                 }
             }
@@ -238,6 +248,11 @@ public partial class MainWindow : Window
             Phantom48V = dto.Phantom48V, Efx = dto.Efx, ReverbOn = dto.ReverbOn,
             Monitor = dto.Monitor, OnAir = dto.OnAir, MasterMute = dto.MasterMute,
         };
+        if (dto.Connected)
+        {
+            _synced = true;
+            UpdateUiEnabled();
+        }
         ApplySnapshotToUi();
         UpdateStatus(dto.Connected);
     }

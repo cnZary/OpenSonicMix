@@ -37,6 +37,7 @@ public sealed class LinearFaderControl : FrameworkElement
     public event Action<double>? ValueChanging;
 
     private bool _dragging;
+    private DateTime _suppressEchoUntil;
 
     private static void OnValueChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
@@ -53,7 +54,14 @@ public sealed class LinearFaderControl : FrameworkElement
         f.InvalidateVisual();
     }
 
-    public void SetValueSilently(double v) => SetCurrentValue(ValueProperty, Math.Clamp(v, Minimum, Maximum));
+    public void SetValueSilently(double v)
+    {
+        if (_dragging || DateTime.UtcNow < _suppressEchoUntil) return;
+        SetCurrentValue(ValueProperty, Math.Clamp(v, Minimum, Maximum));
+    }
+
+    private void SetValueInternal(double v) => SetCurrentValue(ValueProperty, Math.Clamp(v, Minimum, Maximum));
+    private void SuppressEchoBriefly() => _suppressEchoUntil = DateTime.UtcNow.AddMilliseconds(600);
 
     private double TrackTop => 7;
     private double TrackHeight => Math.Max(10, ActualHeight - 14);
@@ -123,7 +131,8 @@ public sealed class LinearFaderControl : FrameworkElement
         Focus();
         if (e.ClickCount == 2)
         {
-            SetValueSilently(DefaultValue);
+            SetValueInternal(DefaultValue);
+            SuppressEchoBriefly();
             ValueChanging?.Invoke(DefaultValue);
             ValueCommitted?.Invoke(DefaultValue);
             e.Handled = true;
@@ -146,7 +155,7 @@ public sealed class LinearFaderControl : FrameworkElement
     {
         double nv = YToValue(y);
         if (Math.Abs(nv - Value) < 0.5) return;
-        SetValueSilently(nv);
+        SetValueInternal(nv);
         ValueChanging?.Invoke(nv);
     }
 
@@ -156,6 +165,7 @@ public sealed class LinearFaderControl : FrameworkElement
         if (!_dragging) return;
         _dragging = false;
         ReleaseMouseCapture();
+        SuppressEchoBriefly();
         InvalidateVisual();
         ValueCommitted?.Invoke(Value);
         e.Handled = true;
@@ -166,7 +176,8 @@ public sealed class LinearFaderControl : FrameworkElement
         base.OnMouseWheel(e);
         double nv = Math.Clamp(Value + (e.Delta > 0 ? 1 : -1), Minimum, Maximum);
         if (Math.Abs(nv - Value) < 0.5) return;
-        SetValueSilently(nv);
+        SetValueInternal(nv);
+        SuppressEchoBriefly();
         ValueChanging?.Invoke(nv);
         ValueCommitted?.Invoke(nv);
         e.Handled = true;
@@ -186,7 +197,8 @@ public sealed class LinearFaderControl : FrameworkElement
         if (e.Key is Key.Up or Key.Down or Key.Home or Key.End)
         {
             nv = Math.Clamp(nv, Minimum, Maximum);
-            SetValueSilently(nv);
+            SetValueInternal(nv);
+            SuppressEchoBriefly();
             ValueChanging?.Invoke(nv);
             ValueCommitted?.Invoke(nv);
             e.Handled = true;

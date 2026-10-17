@@ -106,6 +106,7 @@ public partial class EffectSectionView : UserControl
 
     public void SelectModule(int uiIndex)
     {
+        if (_moduleUi == uiIndex && EditorHost.Content != null) { RefreshModuleStates(); return; }
         _moduleUi = uiIndex;
         RefreshModuleStates();
         EditorHost.Content = uiIndex switch
@@ -125,16 +126,23 @@ public partial class EffectSectionView : UserControl
     {
         var p = _lastState;
         if (p == null) return;
+        if (_moduleUi is 2 or 5)
+        {
+            SyncHpf(p);
+            return;
+        }
         int module = _moduleUi switch { 0 => 0, 1 => 1, 3 => 2, 4 => 3, _ => -1 };
         if (module < 0) return;
         if (EditorHost.Content is AlgorithmEditorView av)
         {
             av.SyncAlgorithm(p.FxAlg[module]);
             SyncFxParams(av, module, p);
+            av.SetMask(!p.IsModuleEnabled(module));
         }
         else if (EditorHost.Content is GlobalEqEditorView gv)
         {
             gv.ApplyState(p);
+            gv.SetMask(!p.IsModuleEnabled(module));
         }
     }
 
@@ -157,16 +165,18 @@ public partial class EffectSectionView : UserControl
 
     private UIElement CreateHpf()
     {
-        // HPF 选择:每通道 75Hz / 100Hz 互斥(LOWCUT)。
+        // HPF 选择:每通道 75Hz / 100Hz 互斥(LOWCUT),未开启 HpfSw 时盖 BYPASS 遮罩。
         var panel = new StackPanel { Margin = new Thickness(12, 16, 12, 16), VerticalAlignment = VerticalAlignment.Center };
         _hpfBtns = new System.Windows.Controls.Primitives.ToggleButton[2, 2];
+        _hpfLabels = new TextBlock[2];
+        _hpfMasks = new Border[2];
         for (int ch = 0; ch < 2; ch++)
         {
+            var cardGrid = new Grid { Margin = new Thickness(0, 4, 0, 4) };
             var card = new Border
             {
                 Style = (Style)FindResource("ChannelHeaderBadge"),
                 Padding = new Thickness(12, 8, 12, 8),
-                Margin = new Thickness(0, 4, 0, 4),
             };
             var row = new Grid();
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
@@ -178,6 +188,7 @@ public partial class EffectSectionView : UserControl
                 VerticalAlignment = VerticalAlignment.Center,
                 Text = Loc.Get(ch == 0 ? "ChMic1" : "ChLineInst2"),
             };
+            _hpfLabels[ch] = label;
             row.Children.Add(label);
             var btnHost = new StackPanel { Orientation = Orientation.Horizontal };
             Grid.SetColumn(btnHost, 1);
@@ -197,19 +208,53 @@ public partial class EffectSectionView : UserControl
             }
             row.Children.Add(btnHost);
             card.Child = row;
-            panel.Children.Add(card);
+            cardGrid.Children.Add(card);
+
+            var mask = new Border
+            {
+                Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xB8, 0x16, 0x16, 0x1A)),
+                CornerRadius = new CornerRadius(5),
+                Visibility = Visibility.Collapsed,
+                Child = new Border
+                {
+                    Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x26, 0xFF, 0xFF, 0xFF)),
+                    BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x28, 0xFF, 0xFF, 0xFF)),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(4),
+                    Padding = new Thickness(10, 2, 10, 2),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Child = new TextBlock
+                    {
+                        Text = "BYPASS",
+                        FontFamily = (System.Windows.Media.FontFamily)FindResource("FontMono"),
+                        FontSize = 11,
+                        FontWeight = FontWeights.SemiBold,
+                        Foreground = (System.Windows.Media.Brush)FindResource("BrushTextSecondary"),
+                    },
+                },
+            };
+            _hpfMasks[ch] = mask;
+            cardGrid.Children.Add(mask);
+            panel.Children.Add(cardGrid);
         }
         return panel;
     }
 
     private System.Windows.Controls.Primitives.ToggleButton[,]? _hpfBtns;
+    private TextBlock[]? _hpfLabels;
+    private Border[]? _hpfMasks;
     private bool _suppressHpf;
 
     private void OnHpfSelected(int ch, int opt)
     {
         if (_suppressHpf) return;
         _suppressHpf = true;
-        if (_hpfBtns != null) _hpfBtns[ch, 1 - opt].IsChecked = false;
+        if (_hpfBtns != null)
+        {
+            _hpfBtns[ch, opt].IsChecked = true;
+            _hpfBtns[ch, 1 - opt].IsChecked = false;
+        }
         _suppressHpf = false;
         SetIntRequested?.Invoke(Protocol.Commands.CommandAddress.WithLocation(Protocol.Commands.CommandAddress.LowCut, ch), opt);
     }
@@ -245,17 +290,21 @@ public partial class EffectSectionView : UserControl
         SyncFxParams(_eq2, FxCatalog.ModuleEq, p);
         _graphEq?.ApplyState(p);
 
-        // HPF 灯
-        if (_hpfBtns != null)
+        SyncHpf(p);
+    }
+
+    private void SyncHpf(PresetState p)
+    {
+        if (_hpfBtns == null) return;
+        _suppressHpf = true;
+        for (int ch = 0; ch < 2; ch++)
         {
-            _suppressHpf = true;
-            for (int ch = 0; ch < 2; ch++)
-            {
-                _hpfBtns[ch, 0].IsChecked = p.LowCut[ch] == 0;
-                _hpfBtns[ch, 1].IsChecked = p.LowCut[ch] == 1;
-            }
-            _suppressHpf = false;
+            _hpfBtns[ch, 0].IsChecked = p.LowCut[ch] == 0;
+            _hpfBtns[ch, 1].IsChecked = p.LowCut[ch] == 1;
+            if (_hpfMasks != null)
+                _hpfMasks[ch].Visibility = p.HpfSw[ch] == 1 ? Visibility.Collapsed : Visibility.Visible;
         }
+        _suppressHpf = false;
     }
 
     private static void SyncFxParams(AlgorithmEditorView? panel, int module, PresetState p)
@@ -294,6 +343,11 @@ public partial class EffectSectionView : UserControl
         {
             ((System.Windows.Controls.Primitives.ToggleButton)TabHost.Children[0]).Content = Loc.Get("ChMic1");
             ((System.Windows.Controls.Primitives.ToggleButton)TabHost.Children[1]).Content = Loc.Get("ChLineInst2");
+        }
+        if (_hpfLabels is { Length: >= 2 })
+        {
+            _hpfLabels[0].Text = Loc.Get("ChMic1");
+            _hpfLabels[1].Text = Loc.Get("ChLineInst2");
         }
         BuildModuleList();
         RefreshModuleStates();

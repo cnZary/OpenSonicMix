@@ -17,7 +17,7 @@ public partial class GlobalEqEditorView : System.Windows.Controls.UserControl
         InitializeComponent();
         Eq.ParameterCommitted += (loc, val) => FxParamRequested?.Invoke(FxCatalog.ModuleGraphEq, loc, val);
         Vol.ValueCommitted += v => FxParamRequested?.Invoke(FxCatalog.ModuleGraphEq, 7, ValueMapping.GlobalEqVolToProtocol(v));
-        Vol.ValueChanging += v => VolValue.Text = ((int)Math.Round(ValueMapping.GlobalEqVolToUi((float)v))).ToString();
+        Vol.ValueChanging += v => VolValue.Text = ((int)Math.Round(v)).ToString();
         ApplyLocalization();
         Loc.LanguageChanged += ApplyLocalization;
     }
@@ -30,7 +30,7 @@ public partial class GlobalEqEditorView : System.Windows.Controls.UserControl
         Eq.SetPoint(2, p.GetFxPara(FxCatalog.ModuleGraphEq, 5), p.GetFxPara(FxCatalog.ModuleGraphEq, 6));
         double ui = ValueMapping.GlobalEqVolToUi(p.GetFxPara(FxCatalog.ModuleGraphEq, 7));
         Vol.SetValueSilently(ui);
-        VolValue.Text = ((int)Math.Round(ui)).ToString();
+        VolValue.Text = ((int)Math.Round(Vol.Value)).ToString();
     }
 
     public void SetMask(bool masked) => Mask.Visibility = masked ? Visibility.Visible : Visibility.Collapsed;

@@ -92,10 +92,13 @@ public partial class ReverbView : UserControl
         {
             if (mod.Algorithms[i].FxId == fxId)
             {
-                _suppressAlg = true;
-                AlgSelect.SelectedIndex = i;
-                _suppressAlg = false;
-                RebuildKnobs();
+                if (AlgSelect.SelectedIndex != i || _knobs.Count != mod.Algorithms[i].Params.Length)
+                {
+                    _suppressAlg = true;
+                    AlgSelect.SelectedIndex = i;
+                    _suppressAlg = false;
+                    RebuildKnobs();
+                }
                 break;
             }
         }
