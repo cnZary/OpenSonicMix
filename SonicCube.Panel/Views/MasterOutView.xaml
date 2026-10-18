@@ -6,8 +6,7 @@
   <Border Style="{StaticResource ChannelCard}">
     <Grid>
       <Grid.RowDefinitions>
-        <RowDefinition Height="48"/>     <!-- Logo 区域(暂时留空,保持高度与位置) -->
-        <RowDefinition Height="Auto"/>   <!-- 总线标题徽章 -->
+        <RowDefinition Height="Auto"/>   <!-- 总线标题 -->
         <RowDefinition Height="*"/>      <!-- 主输出电平 -->
         <RowDefinition Height="Auto"/>   <!-- 刻度 -->
         <RowDefinition Height="Auto"/>   <!-- 左/右 -->
@@ -17,24 +16,20 @@
         <RowDefinition Height="Auto"/>   <!-- 单声道混合 -->
       </Grid.RowDefinitions>
 
-      <!-- Logo 区域:完全留空,不放图片/图标/文字,保持高度与位置 -->
-      <Border Grid.Row="0"/>
-
-      <!-- 主输出标题徽章 -->
-      <Border Grid.Row="1" Style="{StaticResource ChannelHeaderBadge}" Margin="0,0,0,6">
-        <TextBlock x:Name="MasterTitle" Style="{StaticResource TitleText}" Text="MASTER"/>
+      <Border Grid.Row="0" Style="{StaticResource ChannelHeaderBadge}" MinHeight="32" Margin="0,0,0,12">
+        <TextBlock x:Name="MasterTitle" Style="{StaticResource TitleText}" Text="MASTER" VerticalAlignment="Center"/>
       </Border>
 
       <!-- 主输出电平(视觉中心,内嵌深色槽包裹;右侧自带 dB 刻度尺) -->
-      <Border Grid.Row="2" Style="{StaticResource InsetWellBorder}" HorizontalAlignment="Center" Padding="10,8,8,8" Margin="0,2">
+      <Border Grid.Row="1" Style="{StaticResource InsetWellBorder}" HorizontalAlignment="Center" Padding="12,8" MinHeight="180">
         <c:MeterBar x:Name="Meter" Width="58" HorizontalAlignment="Center"/>
       </Border>
 
       <!-- 刻度行:电平表自带 dB 刻度,此处不再单独呈现 -->
-      <TextBlock x:Name="Scale" Grid.Row="3" Style="{StaticResource LabelText}" Visibility="Collapsed"/>
+      <TextBlock x:Name="Scale" Grid.Row="2" Style="{StaticResource LabelText}" Visibility="Collapsed"/>
 
       <!-- 左 / 右 声道标识 -->
-      <Grid Grid.Row="4" Width="64" HorizontalAlignment="Center" Margin="0,4,14,4">
+      <Grid Grid.Row="3" Width="40" HorizontalAlignment="Center" Margin="0,8,20,12">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="*"/>
           <ColumnDefinition Width="*"/>
@@ -43,23 +38,22 @@
         <TextBlock Grid.Column="1" Style="{StaticResource SectionCaptionText}" Text="R"/>
       </Grid>
 
-      <Border Grid.Row="5" Height="1" Background="{StaticResource BrushDivider}" Margin="4,2,4,6"/>
+      <Border Grid.Row="4" Height="1" Background="{StaticResource BrushDivider}" Margin="0,0,0,12"/>
 
       <!-- 效果录入 / 原声录入(分段选择槽) -->
-      <Border Grid.Row="6" Background="{StaticResource BrushPanelDeep}" BorderBrush="#18FFFFFF"
-              BorderThickness="1" CornerRadius="5" Padding="3" Margin="0,0,0,6">
+      <Border Grid.Row="5" Style="{StaticResource InsetWellBorder}" Padding="4" Margin="0,0,0,8">
         <Grid>
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="*"/>
           </Grid.ColumnDefinitions>
-          <ToggleButton x:Name="BtnDspRec" Grid.Column="0" Style="{StaticResource ChannelToggle}" Height="24" Margin="0,0,1.5,0"/>
-          <ToggleButton x:Name="BtnDspMon" Grid.Column="1" Style="{StaticResource ChannelToggle}" Height="24" Margin="1.5,0,0,0"/>
+          <ToggleButton x:Name="BtnDspRec" Grid.Column="0" Style="{StaticResource ChannelToggle}" Margin="0,0,4,0"/>
+          <ToggleButton x:Name="BtnDspMon" Grid.Column="1" Style="{StaticResource ChannelToggle}"/>
         </Grid>
       </Border>
 
-      <ToggleButton x:Name="BtnMasterMute" Grid.Row="7" Style="{StaticResource MuteToggle}" Margin="0,0,0,5"/>
-      <ToggleButton x:Name="BtnMono" Grid.Row="8" Style="{StaticResource ChannelToggle}" Margin="0,0,0,0"/>
+      <ToggleButton x:Name="BtnMasterMute" Grid.Row="6" Style="{StaticResource MuteToggle}" Margin="0,0,0,8"/>
+      <ToggleButton x:Name="BtnMono" Grid.Row="7" Style="{StaticResource ChannelToggle}"/>
     </Grid>
   </Border>
 </UserControl>

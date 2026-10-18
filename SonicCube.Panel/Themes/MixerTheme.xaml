@@ -2,12 +2,10 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:sys="clr-namespace:System;assembly=mscorlib">
   <!--
-    混音台语义化设计变量(对齐 Microsoft Fluent 2 Design System Dark Theme 规范)。
-    参考 PresentationFramework.Fluent Dark.xaml 与 WinUI 2.8+ Design Tokens:
-    - 层级(Layering):Base(#202020) → Secondary(#1C1C1C) → Card(#282828 / #0DFFFFFF) → Control(#0FFFFFFF / #2D2D32)
-    - 几何(Geometry):Overlay/Card CornerRadius = 8px, Control CornerRadius = 4px
-    - 高度描边(Elevation Stroke):ControlElevationBorderBrush(顶亮底暗 3px 渐变), AccentControlElevationBorderBrush(顶柔底暗)
-    - 字体(Typography):Segoe UI Variable Text / Display + Bahnschrift/Cascadia Mono 数值读数 + Segoe Fluent Icons 图标
+    混音台语义资源，复用 .NET 内置 PresentationFramework.Fluent 的颜色与控件模板。
+    Fluent 2: https://fluent2.microsoft.design/design-tokens 、/layout 、/typography
+    中性表面形成层级；强调色跟随系统，仅用于选中态和交互；4px 控件 / 8px 卡片圆角。
+    音频电平与警告色独立保留语义，避免将系统强调色误当作电平状态。
   -->
 
   <!-- 字体族 -->
@@ -18,12 +16,12 @@
 
   <!-- Fluent 2 暗色层级色彩 (Base / Layer / Card / Control) -->
   <Color x:Key="ColorWindow">#FF202020</Color>
-  <Color x:Key="ColorPanel">#FF27272B</Color>
-  <Color x:Key="ColorPanelAlt">#FF2E2E33</Color>
-  <Color x:Key="ColorPanelDeep">#FF1C1C1F</Color>
-  <Color x:Key="ColorCardHeader">#FF303036</Color>
-  <Color x:Key="ColorBorder">#FF35353C</Color>
-  <Color x:Key="ColorBorderLight">#FF45454E</Color>
+  <Color x:Key="ColorPanel">#FF282828</Color>
+  <Color x:Key="ColorPanelAlt">#FF2C2C2C</Color>
+  <Color x:Key="ColorPanelDeep">#FF1C1C1C</Color>
+  <Color x:Key="ColorCardHeader">#FF323232</Color>
+  <Color x:Key="ColorBorder">#FF383838</Color>
+  <Color x:Key="ColorBorderLight">#FF606060</Color>
   <Color x:Key="ColorDivider">#18FFFFFF</Color>
   <Color x:Key="ColorControl">#FF323238</Color>
   <Color x:Key="ColorControlHover">#FF3C3C43</Color>
@@ -49,39 +47,39 @@
   <Color x:Key="ColorDangerHover">#FFF25C69</Color>
 
   <!-- 电平表槽背景与三段音频色 -->
-  <Color x:Key="ColorMeterTrack">#FF141417</Color>
+  <Color x:Key="ColorMeterTrack">#FF161616</Color>
   <Color x:Key="ColorMeterGreen">#FF45D16E</Color>
   <Color x:Key="ColorMeterYellow">#FFF7C83E</Color>
   <Color x:Key="ColorMeterRed">#FFF25252</Color>
 
   <!-- 自绘控件辅助色 (刻度/轨道/帽/高光) -->
-  <Color x:Key="ColorTickMajor">#FF6E6E77</Color>
-  <Color x:Key="ColorFaderTrack">#FF151518</Color>
-  <Color x:Key="ColorThumbTop">#FF4E4E57</Color>
-  <Color x:Key="ColorThumbBottom">#FF34343B</Color>
-  <Color x:Key="ColorThumbBorder">#FF62626D</Color>
+  <Color x:Key="ColorTickMajor">#FF8A8A8A</Color>
+  <Color x:Key="ColorFaderTrack">#FF161616</Color>
+  <Color x:Key="ColorThumbTop">#FF505050</Color>
+  <Color x:Key="ColorThumbBottom">#FF444444</Color>
+  <Color x:Key="ColorThumbBorder">#FF707070</Color>
   <Color x:Key="ColorThumbLine">#FFFFFFFF</Color>
 
   <!-- 基础 SolidColorBrush -->
-  <SolidColorBrush x:Key="BrushWindow" Color="{StaticResource ColorWindow}"/>
-  <SolidColorBrush x:Key="BrushPanel" Color="{StaticResource ColorPanel}"/>
-  <SolidColorBrush x:Key="BrushPanelAlt" Color="{StaticResource ColorPanelAlt}"/>
-  <SolidColorBrush x:Key="BrushPanelDeep" Color="{StaticResource ColorPanelDeep}"/>
+  <SolidColorBrush x:Key="BrushWindow" Color="{DynamicResource SolidBackgroundFillColorBase}"/>
+  <SolidColorBrush x:Key="BrushPanel" Color="{DynamicResource SolidBackgroundFillColorTertiary}"/>
+  <SolidColorBrush x:Key="BrushPanelAlt" Color="{DynamicResource SolidBackgroundFillColorQuarternary}"/>
+  <SolidColorBrush x:Key="BrushPanelDeep" Color="{DynamicResource SolidBackgroundFillColorSecondary}"/>
   <SolidColorBrush x:Key="BrushCardHeader" Color="{StaticResource ColorCardHeader}"/>
   <SolidColorBrush x:Key="BrushBorder" Color="{StaticResource ColorBorder}"/>
   <SolidColorBrush x:Key="BrushBorderLight" Color="{StaticResource ColorBorderLight}"/>
-  <SolidColorBrush x:Key="BrushDivider" Color="{StaticResource ColorDivider}"/>
-  <SolidColorBrush x:Key="BrushControl" Color="{StaticResource ColorControl}"/>
-  <SolidColorBrush x:Key="BrushControlHover" Color="{StaticResource ColorControlHover}"/>
-  <SolidColorBrush x:Key="BrushControlPressed" Color="{StaticResource ColorControlPressed}"/>
-  <SolidColorBrush x:Key="BrushText" Color="{StaticResource ColorText}"/>
-  <SolidColorBrush x:Key="BrushTextSecondary" Color="{StaticResource ColorTextSecondary}"/>
-  <SolidColorBrush x:Key="BrushTextTertiary" Color="{StaticResource ColorTextTertiary}"/>
-  <SolidColorBrush x:Key="BrushTextDisabled" Color="{StaticResource ColorTextDisabled}"/>
-  <SolidColorBrush x:Key="BrushAccent" Color="{StaticResource ColorAccent}"/>
-  <SolidColorBrush x:Key="BrushAccentHover" Color="{StaticResource ColorAccentHover}"/>
-  <SolidColorBrush x:Key="BrushAccentPressed" Color="{StaticResource ColorAccentPressed}"/>
-  <SolidColorBrush x:Key="BrushAccentSubtle" Color="{StaticResource ColorAccentSubtle}"/>
+  <SolidColorBrush x:Key="BrushDivider" Color="{DynamicResource DividerStrokeColorDefault}"/>
+  <SolidColorBrush x:Key="BrushControl" Color="{DynamicResource ControlFillColorDefault}"/>
+  <SolidColorBrush x:Key="BrushControlHover" Color="{DynamicResource ControlFillColorSecondary}"/>
+  <SolidColorBrush x:Key="BrushControlPressed" Color="{DynamicResource ControlFillColorTertiary}"/>
+  <SolidColorBrush x:Key="BrushText" Color="{DynamicResource TextFillColorPrimary}"/>
+  <SolidColorBrush x:Key="BrushTextSecondary" Color="{DynamicResource TextFillColorSecondary}"/>
+  <SolidColorBrush x:Key="BrushTextTertiary" Color="{DynamicResource TextFillColorTertiary}"/>
+  <SolidColorBrush x:Key="BrushTextDisabled" Color="{DynamicResource TextFillColorDisabled}"/>
+  <SolidColorBrush x:Key="BrushAccent" Color="{DynamicResource {x:Static SystemColors.AccentColorLight2Key}}"/>
+  <SolidColorBrush x:Key="BrushAccentHover" Color="{DynamicResource {x:Static SystemColors.AccentColorLight2Key}}" Opacity="0.9"/>
+  <SolidColorBrush x:Key="BrushAccentPressed" Color="{DynamicResource {x:Static SystemColors.AccentColorLight2Key}}" Opacity="0.8"/>
+  <SolidColorBrush x:Key="BrushAccentSubtle" Color="{DynamicResource {x:Static SystemColors.AccentColorLight2Key}}" Opacity="0.12"/>
   <SolidColorBrush x:Key="BrushOn" Color="{StaticResource ColorOn}"/>
   <SolidColorBrush x:Key="BrushOff" Color="{StaticResource ColorOff}"/>
   <SolidColorBrush x:Key="BrushWarn" Color="{StaticResource ColorWarn}"/>
@@ -94,17 +92,9 @@
   <SolidColorBrush x:Key="BrushFaderTrack" Color="{StaticResource ColorFaderTrack}"/>
   <SolidColorBrush x:Key="BrushThumbLine" Color="{StaticResource ColorThumbLine}"/>
 
-  <!-- Fluent 2 Elevation Brushes (顶部微亮高光 + 底部阴影描边,营造 Windows 11 立体触感) -->
-  <LinearGradientBrush x:Key="BrushCardElevationBorder" StartPoint="0,0" EndPoint="0,1">
-    <GradientStop Offset="0.0" Color="#24FFFFFF"/>
-    <GradientStop Offset="0.15" Color="#14FFFFFF"/>
-    <GradientStop Offset="1.0" Color="#28000000"/>
-  </LinearGradientBrush>
-
-  <LinearGradientBrush x:Key="BrushCardSurface" StartPoint="0,0" EndPoint="0,1">
-    <GradientStop Offset="0.0" Color="#FF2B2B30"/>
-    <GradientStop Offset="1.0" Color="#FF242428"/>
-  </LinearGradientBrush>
+  <!-- Windows Fluent 用细描边表达卡片层级，避免大面积装饰渐变。 -->
+  <SolidColorBrush x:Key="BrushCardElevationBorder" Color="{DynamicResource CardStrokeColorDefault}"/>
+  <SolidColorBrush x:Key="BrushCardSurface" Color="{DynamicResource SolidBackgroundFillColorTertiary}"/>
 
   <LinearGradientBrush x:Key="BrushControlElevation" MappingMode="Absolute" StartPoint="0,0" EndPoint="0,3">
     <GradientStop Offset="0.33" Color="#26FFFFFF"/>
@@ -123,34 +113,34 @@
   <sys:Double x:Key="RadiusSmall">3</sys:Double>
   <sys:Double x:Key="RadiusMedium">4</sys:Double>
   <sys:Double x:Key="RadiusLarge">8</sys:Double>
-  <sys:Double x:Key="ControlHeight">26</sys:Double>
+  <sys:Double x:Key="ControlHeight">28</sys:Double>
   <sys:Double x:Key="SpacingXs">2</sys:Double>
   <sys:Double x:Key="SpacingS">4</sys:Double>
-  <sys:Double x:Key="SpacingM">6</sys:Double>
-  <sys:Double x:Key="SpacingL">8</sys:Double>
+  <sys:Double x:Key="SpacingM">8</sys:Double>
+  <sys:Double x:Key="SpacingL">12</sys:Double>
 
   <!-- 文字尺寸 -->
-  <sys:Double x:Key="FontSizeLabel">11</sys:Double>
-  <sys:Double x:Key="FontSizeBody">12</sys:Double>
-  <sys:Double x:Key="FontSizeTitle">13</sys:Double>
+  <sys:Double x:Key="FontSizeLabel">12</sys:Double>
+  <sys:Double x:Key="FontSizeBody">14</sys:Double>
+  <sys:Double x:Key="FontSizeTitle">14</sys:Double>
 
-  <!-- 通道条面板容器:Fluent 2 Card Layer (8px 圆角 + 渐变立体描边 + 细腻顶底渐变) -->
+  <!-- 通道卡片 -->
   <Style x:Key="ChannelCard" TargetType="Border">
     <Setter Property="Background" Value="{StaticResource BrushCardSurface}"/>
     <Setter Property="BorderBrush" Value="{StaticResource BrushCardElevationBorder}"/>
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="CornerRadius" Value="8"/>
-    <Setter Property="Padding" Value="8"/>
+    <Setter Property="Padding" Value="12"/>
     <Setter Property="SnapsToDevicePixels" Value="True"/>
   </Style>
 
   <!-- 嵌入式深色槽容器(如电平表外框、参数旋钮盘、图形 EQ 背板) -->
   <Style x:Key="InsetWellBorder" TargetType="Border">
     <Setter Property="Background" Value="{StaticResource BrushPanelDeep}"/>
-    <Setter Property="BorderBrush" Value="#14FFFFFF"/>
-    <Setter Property="BorderThickness" Value="1"/>
-    <Setter Property="CornerRadius" Value="6"/>
-    <Setter Property="Padding" Value="6"/>
+    <Setter Property="BorderBrush" Value="{StaticResource BrushDivider}"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="CornerRadius" Value="4"/>
+    <Setter Property="Padding" Value="8"/>
     <Setter Property="SnapsToDevicePixels" Value="True"/>
   </Style>
 
@@ -160,17 +150,16 @@
     <Setter Property="BorderBrush" Value="#18FFFFFF"/>
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="CornerRadius" Value="4"/>
-    <Setter Property="Padding" Value="6,2"/>
+    <Setter Property="Padding" Value="8,4"/>
     <Setter Property="SnapsToDevicePixels" Value="True"/>
   </Style>
 
   <!-- 通道条顶部标题徽章 -->
   <Style x:Key="ChannelHeaderBadge" TargetType="Border">
-    <Setter Property="Background" Value="#12FFFFFF"/>
-    <Setter Property="BorderBrush" Value="#18FFFFFF"/>
-    <Setter Property="BorderThickness" Value="1"/>
-    <Setter Property="CornerRadius" Value="5"/>
-    <Setter Property="Padding" Value="6,4"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="CornerRadius" Value="4"/>
+    <Setter Property="Padding" Value="0,4"/>
     <Setter Property="SnapsToDevicePixels" Value="True"/>
   </Style>
 
@@ -178,10 +167,11 @@
   <Style x:Key="ChannelToggle" TargetType="ToggleButton">
     <Setter Property="Height" Value="{StaticResource ControlHeight}"/>
     <Setter Property="FontFamily" Value="{StaticResource FontPrimary}"/>
-    <Setter Property="FontSize" Value="11"/>
+    <Setter Property="FontSize" Value="12"/>
     <Setter Property="FontWeight" Value="SemiBold"/>
     <Setter Property="Foreground" Value="{StaticResource BrushText}"/>
     <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="FocusVisualStyle" Value="{StaticResource DefaultControlFocusVisualStyle}"/>
     <Setter Property="SnapsToDevicePixels" Value="True"/>
     <Setter Property="Template">
       <Setter.Value>
@@ -335,6 +325,7 @@
     <Setter Property="FontWeight" Value="SemiBold"/>
     <Setter Property="Foreground" Value="{StaticResource BrushTextSecondary}"/>
     <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="FocusVisualStyle" Value="{StaticResource DefaultControlFocusVisualStyle}"/>
     <Setter Property="SnapsToDevicePixels" Value="True"/>
     <Setter Property="Template">
       <Setter.Value>
@@ -390,7 +381,7 @@
                            Fill="{StaticResource BrushAccent}" VerticalAlignment="Center" Margin="0,0,7,0"/>
                 <ContentPresenter ContentSource="Header" VerticalAlignment="Center"
                                   TextElement.FontFamily="{StaticResource FontDisplay}"
-                                  TextElement.FontWeight="SemiBold" TextElement.FontSize="12"
+                                  TextElement.FontWeight="SemiBold" TextElement.FontSize="14"
                                   TextElement.Foreground="{StaticResource BrushText}"/>
               </StackPanel>
               <ContentPresenter/>
@@ -401,167 +392,37 @@
     </Setter>
   </Style>
 
-  <!-- 设置窗 CheckBox / RadioButton:Fluent 2 实心强调色选中态(无动画避免冻结画刷异常) -->
-  <Style x:Key="PlainCheck" TargetType="CheckBox">
-    <Setter Property="Foreground" Value="{StaticResource BrushText}"/>
+  <!-- 标准控件直接继承 WPF 内置 Fluent 模板，保留原生键盘导航与交互状态。 -->
+  <Style x:Key="PlainCheck" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
     <Setter Property="FontFamily" Value="{StaticResource FontPrimary}"/>
     <Setter Property="FontSize" Value="12"/>
-    <Setter Property="Cursor" Value="Hand"/>
-    <Setter Property="SnapsToDevicePixels" Value="True"/>
-    <Setter Property="Template">
-      <Setter.Value>
-        <ControlTemplate TargetType="CheckBox">
-          <StackPanel Orientation="Horizontal" Background="Transparent">
-            <Border x:Name="box" Width="18" Height="18" CornerRadius="4"
-                    Background="#19000000" BorderBrush="#8BFFFFFF" BorderThickness="1"
-                    VerticalAlignment="Center">
-              <Path x:Name="tick" Data="M 3.5,9.0 L 7.2,12.7 L 14.5,5.2"
-                    Stroke="#FF0A0A0D" StrokeThickness="2"
-                    StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
-                    Visibility="Collapsed"/>
-            </Border>
-            <ContentPresenter Margin="8,0,0,0" VerticalAlignment="Center"/>
-          </StackPanel>
-          <ControlTemplate.Triggers>
-            <Trigger Property="IsMouseOver" Value="True">
-              <Setter TargetName="box" Property="Background" Value="#12FFFFFF"/>
-            </Trigger>
-            <Trigger Property="IsChecked" Value="True">
-              <Setter TargetName="box" Property="Background" Value="{StaticResource BrushAccent}"/>
-              <Setter TargetName="box" Property="BorderBrush" Value="{StaticResource BrushAccent}"/>
-              <Setter TargetName="tick" Property="Visibility" Value="Visible"/>
-            </Trigger>
-            <MultiTrigger>
-              <MultiTrigger.Conditions>
-                <Condition Property="IsChecked" Value="True"/>
-                <Condition Property="IsMouseOver" Value="True"/>
-              </MultiTrigger.Conditions>
-              <Setter TargetName="box" Property="Background" Value="{StaticResource BrushAccentHover}"/>
-              <Setter TargetName="box" Property="BorderBrush" Value="{StaticResource BrushAccentHover}"/>
-            </MultiTrigger>
-            <Trigger Property="IsEnabled" Value="False">
-              <Setter Property="Foreground" Value="{StaticResource BrushTextDisabled}"/>
-              <Setter TargetName="box" Property="BorderBrush" Value="#28FFFFFF"/>
-              <Setter TargetName="box" Property="Opacity" Value="0.5"/>
-            </Trigger>
-          </ControlTemplate.Triggers>
-        </ControlTemplate>
-      </Setter.Value>
-    </Setter>
+    <Setter Property="MinHeight" Value="28"/>
+    <Setter Property="Padding" Value="8,0,0,0"/>
   </Style>
 
-  <Style x:Key="PlainRadio" TargetType="RadioButton">
-    <Setter Property="Foreground" Value="{StaticResource BrushText}"/>
+  <Style x:Key="PlainRadio" TargetType="RadioButton" BasedOn="{StaticResource {x:Type RadioButton}}">
     <Setter Property="FontFamily" Value="{StaticResource FontPrimary}"/>
     <Setter Property="FontSize" Value="12"/>
-    <Setter Property="Cursor" Value="Hand"/>
-    <Setter Property="SnapsToDevicePixels" Value="True"/>
-    <Setter Property="Template">
-      <Setter.Value>
-        <ControlTemplate TargetType="RadioButton">
-          <StackPanel Orientation="Horizontal" Background="Transparent">
-            <Border x:Name="ring" Width="18" Height="18" CornerRadius="9"
-                    Background="#19000000" BorderBrush="#8BFFFFFF" BorderThickness="1"
-                    VerticalAlignment="Center">
-              <Ellipse x:Name="dot" Width="10" Height="10" Fill="#FF0A0A0D" Visibility="Collapsed"/>
-            </Border>
-            <ContentPresenter Margin="8,0,0,0" VerticalAlignment="Center"/>
-          </StackPanel>
-          <ControlTemplate.Triggers>
-            <Trigger Property="IsMouseOver" Value="True">
-              <Setter TargetName="ring" Property="Background" Value="#12FFFFFF"/>
-            </Trigger>
-            <Trigger Property="IsChecked" Value="True">
-              <Setter TargetName="ring" Property="Background" Value="{StaticResource BrushAccent}"/>
-              <Setter TargetName="ring" Property="BorderBrush" Value="{StaticResource BrushAccent}"/>
-              <Setter TargetName="dot" Property="Visibility" Value="Visible"/>
-            </Trigger>
-            <MultiTrigger>
-              <MultiTrigger.Conditions>
-                <Condition Property="IsChecked" Value="True"/>
-                <Condition Property="IsMouseOver" Value="True"/>
-              </MultiTrigger.Conditions>
-              <Setter TargetName="ring" Property="Background" Value="{StaticResource BrushAccentHover}"/>
-              <Setter TargetName="ring" Property="BorderBrush" Value="{StaticResource BrushAccentHover}"/>
-            </MultiTrigger>
-            <Trigger Property="IsEnabled" Value="False">
-              <Setter Property="Foreground" Value="{StaticResource BrushTextDisabled}"/>
-              <Setter TargetName="ring" Property="BorderBrush" Value="#28FFFFFF"/>
-            </Trigger>
-          </ControlTemplate.Triggers>
-        </ControlTemplate>
-      </Setter.Value>
-    </Setter>
+    <Setter Property="MinHeight" Value="28"/>
+    <Setter Property="Padding" Value="8,0,0,0"/>
   </Style>
 
   <!-- 次要操作按钮(重置/菜单/设置):Fluent 2 Standard Button -->
-  <Style x:Key="SubtleButton" TargetType="Button">
+  <Style x:Key="SubtleButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
     <Setter Property="Height" Value="{StaticResource ControlHeight}"/>
+    <Setter Property="MinHeight" Value="28"/>
     <Setter Property="FontFamily" Value="{StaticResource FontPrimary}"/>
-    <Setter Property="FontSize" Value="11.5"/>
-    <Setter Property="FontWeight" Value="SemiBold"/>
-    <Setter Property="Foreground" Value="{StaticResource BrushText}"/>
+    <Setter Property="FontSize" Value="12"/>
     <Setter Property="Padding" Value="12,0"/>
-    <Setter Property="Cursor" Value="Hand"/>
-    <Setter Property="SnapsToDevicePixels" Value="True"/>
-    <Setter Property="Template">
-      <Setter.Value>
-        <ControlTemplate TargetType="Button">
-          <Border x:Name="b" Background="{StaticResource BrushControl}"
-                  BorderBrush="{StaticResource BrushControlElevation}" BorderThickness="1"
-                  CornerRadius="4" Padding="{TemplateBinding Padding}">
-            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-          </Border>
-          <ControlTemplate.Triggers>
-            <Trigger Property="IsMouseOver" Value="True">
-              <Setter TargetName="b" Property="Background" Value="{StaticResource BrushControlHover}"/>
-            </Trigger>
-            <Trigger Property="IsPressed" Value="True">
-              <Setter TargetName="b" Property="Background" Value="{StaticResource BrushControlPressed}"/>
-              <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource BrushBorder}"/>
-              <Setter Property="Foreground" Value="{StaticResource BrushTextSecondary}"/>
-            </Trigger>
-            <Trigger Property="IsEnabled" Value="False">
-              <Setter Property="Foreground" Value="{StaticResource BrushTextDisabled}"/>
-              <Setter TargetName="b" Property="Background" Value="{StaticResource BrushPanelDeep}"/>
-              <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource BrushBorder}"/>
-            </Trigger>
-            <Trigger Property="IsKeyboardFocused" Value="True">
-              <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource BrushAccentHover}"/>
-            </Trigger>
-          </ControlTemplate.Triggers>
-        </ControlTemplate>
-      </Setter.Value>
-    </Setter>
   </Style>
 
   <!-- 强调主按钮(设置窗 OK 等) -->
-  <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource SubtleButton}">
-    <Setter Property="Foreground" Value="#FF0A0A0D"/>
-    <Setter Property="Template">
-      <Setter.Value>
-        <ControlTemplate TargetType="Button">
-          <Border x:Name="b" Background="{StaticResource BrushAccent}"
-                  BorderBrush="{StaticResource BrushAccentElevation}" BorderThickness="1"
-                  CornerRadius="4" Padding="{TemplateBinding Padding}">
-            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-          </Border>
-          <ControlTemplate.Triggers>
-            <Trigger Property="IsMouseOver" Value="True">
-              <Setter TargetName="b" Property="Background" Value="{StaticResource BrushAccentHover}"/>
-            </Trigger>
-            <Trigger Property="IsPressed" Value="True">
-              <Setter TargetName="b" Property="Background" Value="{StaticResource BrushAccentPressed}"/>
-            </Trigger>
-            <Trigger Property="IsEnabled" Value="False">
-              <Setter Property="Foreground" Value="{StaticResource BrushTextDisabled}"/>
-              <Setter TargetName="b" Property="Background" Value="#28FFFFFF"/>
-              <Setter TargetName="b" Property="BorderBrush" Value="Transparent"/>
-            </Trigger>
-          </ControlTemplate.Triggers>
-        </ControlTemplate>
-      </Setter.Value>
-    </Setter>
+  <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
+    <Setter Property="Height" Value="32"/>
+    <Setter Property="MinHeight" Value="32"/>
+    <Setter Property="FontFamily" Value="{StaticResource FontPrimary}"/>
+    <Setter Property="FontSize" Value="14"/>
+    <Setter Property="Padding" Value="16,0"/>
   </Style>
 
   <!-- 危险确认按钮(重置整台设备) -->
@@ -603,6 +464,7 @@
     <Setter Property="FontWeight" Value="Medium"/>
     <Setter Property="Foreground" Value="{StaticResource BrushTextSecondary}"/>
     <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="FocusVisualStyle" Value="{StaticResource DefaultControlFocusVisualStyle}"/>
     <Setter Property="SnapsToDevicePixels" Value="True"/>
     <Setter Property="Template">
       <Setter.Value>
@@ -644,7 +506,7 @@
   <Style x:Key="SectionCaptionText" TargetType="TextBlock">
     <Setter Property="Foreground" Value="{StaticResource BrushTextTertiary}"/>
     <Setter Property="FontFamily" Value="{StaticResource FontPrimary}"/>
-    <Setter Property="FontSize" Value="10"/>
+    <Setter Property="FontSize" Value="12"/>
     <Setter Property="FontWeight" Value="SemiBold"/>
     <Setter Property="TextAlignment" Value="Center"/>
   </Style>
@@ -652,7 +514,7 @@
   <Style x:Key="ValueText" TargetType="TextBlock">
     <Setter Property="Foreground" Value="{StaticResource BrushText}"/>
     <Setter Property="FontFamily" Value="{StaticResource FontMono}"/>
-    <Setter Property="FontSize" Value="11.5"/>
+    <Setter Property="FontSize" Value="12"/>
     <Setter Property="FontWeight" Value="SemiBold"/>
     <Setter Property="TextAlignment" Value="Center"/>
   </Style>
@@ -665,110 +527,22 @@
     <Setter Property="TextAlignment" Value="Center"/>
   </Style>
 
-  <!-- 下拉框:Fluent 2 ComboBox (带 Elevation 边框、阴影圆角弹出层与选中胶囊指示条) -->
-  <Style x:Key="MixerCombo" TargetType="ComboBox">
-    <Setter Property="Height" Value="30"/>
+  <!-- 下拉框与弹出项使用内置 Fluent 模板。 -->
+  <Style x:Key="MixerCombo" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+    <Setter Property="Height" Value="32"/>
+    <Setter Property="MinHeight" Value="28"/>
+    <Setter Property="MinWidth" Value="0"/>
     <Setter Property="FontFamily" Value="{StaticResource FontPrimary}"/>
     <Setter Property="FontSize" Value="12"/>
-    <Setter Property="Foreground" Value="{StaticResource BrushText}"/>
-    <Setter Property="Background" Value="{StaticResource BrushControl}"/>
-    <Setter Property="BorderBrush" Value="{StaticResource BrushControlElevation}"/>
-    <Setter Property="Padding" Value="10,0"/>
-    <Setter Property="Cursor" Value="Hand"/>
-    <Setter Property="SnapsToDevicePixels" Value="True"/>
-    <Setter Property="Template">
-      <Setter.Value>
-        <ControlTemplate TargetType="ComboBox">
-          <Grid x:Name="root" Background="Transparent">
-            <Border x:Name="b" Background="{TemplateBinding Background}"
-                    BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="4"/>
-            <Grid Margin="1">
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="28"/>
-              </Grid.ColumnDefinitions>
-              <TextBlock Grid.Column="0" Margin="10,0,0,0" VerticalAlignment="Center"
-                         HorizontalAlignment="Left" TextTrimming="CharacterEllipsis"
-                         Foreground="{TemplateBinding Foreground}" FontSize="{TemplateBinding FontSize}"
-                         FontWeight="Medium"
-                         Text="{Binding SelectionBoxItem, RelativeSource={RelativeSource TemplatedParent}}"/>
-              <Path x:Name="arrow" Grid.Column="1" Data="M 0,0 L 4.5,4.5 L 9,0"
-                    Stroke="{StaticResource BrushTextSecondary}" StrokeThickness="1.4"
-                    StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
-                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            </Grid>
-            <Popup x:Name="pop" IsOpen="{TemplateBinding IsDropDownOpen}"
-                   Placement="Bottom" AllowsTransparency="True" Focusable="False"
-                   PopupAnimation="Fade" VerticalOffset="2">
-              <Border Margin="8,2,8,12" Background="#FF2C2C32"
-                      BorderBrush="{StaticResource BrushCardElevationBorder}"
-                      BorderThickness="1" CornerRadius="8" Padding="4"
-                      MinWidth="{TemplateBinding ActualWidth}" MaxHeight="320">
-                <Border.Effect>
-                  <DropShadowEffect BlurRadius="16" Direction="270" Opacity="0.45" ShadowDepth="4" Color="#FF000000"/>
-                </Border.Effect>
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                  <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
-                </ScrollViewer>
-              </Border>
-            </Popup>
-          </Grid>
-          <ControlTemplate.Triggers>
-            <Trigger Property="IsMouseOver" Value="True">
-              <Setter TargetName="b" Property="Background" Value="{StaticResource BrushControlHover}"/>
-              <Setter TargetName="arrow" Property="Stroke" Value="{StaticResource BrushText}"/>
-            </Trigger>
-            <Trigger Property="IsDropDownOpen" Value="True">
-              <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource BrushAccent}"/>
-              <Setter TargetName="arrow" Property="Stroke" Value="{StaticResource BrushAccent}"/>
-            </Trigger>
-            <Trigger Property="IsKeyboardFocused" Value="True">
-              <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource BrushAccent}"/>
-            </Trigger>
-            <Trigger Property="IsEnabled" Value="False">
-              <Setter Property="Foreground" Value="{StaticResource BrushTextDisabled}"/>
-              <Setter TargetName="b" Property="Background" Value="{StaticResource BrushPanelDeep}"/>
-            </Trigger>
-          </ControlTemplate.Triggers>
-        </ControlTemplate>
-      </Setter.Value>
-    </Setter>
+    <Setter Property="Padding" Value="10,0,28,0"/>
+    <Setter Property="HorizontalContentAlignment" Value="Left"/>
+    <Setter Property="ToolTip" Value="{Binding SelectedItem, RelativeSource={RelativeSource Self}}"/>
   </Style>
 
-  <Style x:Key="MixerComboItem" TargetType="ComboBoxItem">
-    <Setter Property="Foreground" Value="{StaticResource BrushText}"/>
+  <Style x:Key="MixerComboItem" TargetType="ComboBoxItem" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
     <Setter Property="FontFamily" Value="{StaticResource FontPrimary}"/>
     <Setter Property="FontSize" Value="12"/>
+    <Setter Property="MinHeight" Value="32"/>
     <Setter Property="Padding" Value="12,6"/>
-    <Setter Property="Margin" Value="0,1"/>
-    <Setter Property="Cursor" Value="Hand"/>
-    <Setter Property="SnapsToDevicePixels" Value="True"/>
-    <Setter Property="Template">
-      <Setter.Value>
-        <ControlTemplate TargetType="ComboBoxItem">
-          <Border x:Name="b" Background="Transparent" CornerRadius="4" Padding="{TemplateBinding Padding}">
-            <Grid>
-              <Rectangle x:Name="pill" Width="3" Height="14" RadiusX="1.5" RadiusY="1.5"
-                         HorizontalAlignment="Left" VerticalAlignment="Center" Margin="-8,0,0,0"
-                         Fill="{StaticResource BrushAccent}" Visibility="Collapsed"/>
-              <ContentPresenter VerticalAlignment="Center"/>
-            </Grid>
-          </Border>
-          <ControlTemplate.Triggers>
-            <Trigger Property="IsHighlighted" Value="True">
-              <Setter TargetName="b" Property="Background" Value="{StaticResource BrushControlHover}"/>
-            </Trigger>
-            <Trigger Property="IsMouseOver" Value="True">
-              <Setter TargetName="b" Property="Background" Value="{StaticResource BrushControlHover}"/>
-            </Trigger>
-            <Trigger Property="IsSelected" Value="True">
-              <Setter TargetName="b" Property="Background" Value="{StaticResource BrushControl}"/>
-              <Setter TargetName="pill" Property="Visibility" Value="Visible"/>
-              <Setter Property="FontWeight" Value="SemiBold"/>
-            </Trigger>
-          </ControlTemplate.Triggers>
-        </ControlTemplate>
-      </Setter.Value>
-    </Setter>
   </Style>
 </ResourceDictionary>

@@ -2,25 +2,25 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:c="clr-namespace:SonicCube.Panel.Controls">
-  <Border Style="{StaticResource ChannelCard}" Padding="8">
+  <Border Style="{StaticResource ChannelCard}">
     <Grid>
       <Grid.RowDefinitions>
-        <RowDefinition Height="Auto"/>   <!-- 页签 + 重置 -->
-        <RowDefinition Height="Auto"/>   <!-- 模块选择 + 编辑区(不拉伸) -->
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
       </Grid.RowDefinitions>
 
       <Grid Grid.Row="0" Margin="0,0,0,8">
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Center">
-          <!-- Fluent 2 Pivot Tab 底座 -->
-          <Border Background="{StaticResource BrushPanelDeep}" BorderBrush="#18FFFFFF"
-                  BorderThickness="1" CornerRadius="6" Padding="3,2,0,2">
-            <StackPanel x:Name="TabHost" Orientation="Horizontal"/>
-          </Border>
-          <Button x:Name="FullResetBtn" Style="{StaticResource DangerButton}" Padding="10,0"
-                  Margin="8,0,0,0" VerticalAlignment="Center" Content="Reset All"/>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <StackPanel x:Name="TabHost" Orientation="Horizontal" VerticalAlignment="Center"/>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+          <Button x:Name="FullResetBtn" Style="{StaticResource SubtleButton}" Padding="12,0"
+                  Foreground="{StaticResource BrushTextSecondary}" Content="Reset All"/>
+          <Button x:Name="ResetBtn" Style="{StaticResource SubtleButton}" Padding="12,0"
+                  Margin="8,0,0,0" Content="Reset"/>
         </StackPanel>
-        <Button x:Name="ResetBtn" Style="{StaticResource SubtleButton}" HorizontalAlignment="Right"
-                VerticalAlignment="Center" Padding="12,0" Content="Reset"/>
       </Grid>
 
       <Grid Grid.Row="1">
@@ -28,13 +28,9 @@
           <ColumnDefinition Width="Auto"/>
           <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
-        <!-- 窄模块选择列:Fluent 2 Navigation Pill 风格 -->
-        <Border Grid.Column="0" Style="{StaticResource InsetWellBorder}" Padding="5" Margin="0,0,8,0">
-          <StackPanel x:Name="ModuleList" VerticalAlignment="Center"/>
-        </Border>
-        <!-- 当前模块编辑区 -->
-        <Border Grid.Column="1" Style="{StaticResource InsetWellBorder}" Padding="8" VerticalAlignment="Top" MinHeight="168">
-          <ContentControl x:Name="EditorHost"/>
+        <StackPanel x:Name="ModuleList" Grid.Column="0" VerticalAlignment="Top" Margin="0,0,12,0"/>
+        <Border Grid.Column="1" Style="{StaticResource InsetWellBorder}" Padding="8">
+          <ContentControl x:Name="EditorHost" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
         </Border>
       </Grid>
     </Grid>

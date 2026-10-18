@@ -27,6 +27,8 @@ public sealed class KnobControl : FrameworkElement
         Cursor = Cursors.Hand;
         AutomationProperties.SetName(this, "Knob");
         IsEnabledChanged += (_, _) => InvalidateVisual();
+        GotKeyboardFocus += (_, _) => InvalidateVisual();
+        LostKeyboardFocus += (_, _) => InvalidateVisual();
         _editor.Visibility = Visibility.Collapsed;
         _editor.TextAlignment = TextAlignment.Center;
         _editor.LostFocus += (_, _) => CommitEditor();
@@ -213,6 +215,23 @@ public sealed class KnobControl : FrameworkElement
         if (_editor.Parent is System.Windows.Controls.Panel panel)
         {
             var pos = TranslatePoint(new Point(4, ActualHeight - 20), panel);
+            if (panel is Grid grid)
+            {
+                int row = Grid.GetRow(this), column = Grid.GetColumn(this);
+                Grid.SetRow(_editor, row);
+                Grid.SetColumn(_editor, column);
+                Grid.SetRowSpan(_editor, Grid.GetRowSpan(this));
+                Grid.SetColumnSpan(_editor, Grid.GetColumnSpan(this));
+
+                // Grid positions each child within its cell; convert the parent
+                // coordinates so the overlay cannot enlarge preceding Auto rows.
+                for (int i = 0; i < row && i < grid.RowDefinitions.Count; i++)
+                    pos.Y -= grid.RowDefinitions[i].ActualHeight;
+                for (int i = 0; i < column && i < grid.ColumnDefinitions.Count; i++)
+                    pos.X -= grid.ColumnDefinitions[i].ActualWidth;
+            }
+            _editor.MinWidth = 0;
+            _editor.MinHeight = 0;
             _editor.Width = Math.Max(36, ActualWidth - 8);
             _editor.Height = 20;
             _editor.FontSize = 11;
@@ -247,63 +266,49 @@ public sealed class KnobControl : FrameworkElement
 
     // ── 缓存资源 ──
     private Brush? _panelDeep, _accent, _accentHover, _off, _textPrimary, _textSecondary, _textDisabled, _pillFill;
-    private LinearGradientBrush? _capFill, _capFillHover, _capElevationStroke;
-    private Pen? _trackArcPen, _activeArcPen, _hoverArcPen, _capBorderPen, _pillBorderPen, _tickDotPen;
+    private Brush? _capFill, _capFillHover;
+    private Pen? _trackArcPen, _activeArcPen, _hoverArcPen, _capBorderPen, _pillBorderPen, _focusPen;
     private Pen? _pointerNormalPen, _pointerActivePen, _pointerDisabledPen;
     private Typeface? _labelTypeface, _valueTypeface;
 
     private void EnsureResources()
     {
         if (_capFill is not null) return;
-        _panelDeep = (Brush)FindResource("BrushPanelDeep");
-        _accent = (Brush)FindResource("BrushAccent");
-        _accentHover = (Brush)FindResource("BrushAccentHover");
-        _off = (Brush)FindResource("BrushOff");
-        _textPrimary = (Brush)FindResource("BrushText");
-        _textSecondary = (Brush)FindResource("BrushTextSecondary");
-        _textDisabled = (Brush)FindResource("BrushTextDisabled");
+        _panelDeep = this.GetDrawingBrush("BrushPanelDeep");
+        _accent = this.GetDrawingBrush("BrushAccent");
+        _accentHover = this.GetDrawingBrush("BrushAccentHover");
+        _off = this.GetDrawingBrush("BrushOff");
+        _textPrimary = this.GetDrawingBrush("BrushText");
+        _textSecondary = this.GetDrawingBrush("BrushTextSecondary");
+        _textDisabled = this.GetDrawingBrush("BrushTextDisabled");
 
-        _pillFill = new SolidColorBrush(Color.FromArgb(0x88, 0x16, 0x16, 0x1A));
-        _pillFill.Freeze();
-        var pillBorderBrush = new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF));
-        pillBorderBrush.Freeze();
-        _pillBorderPen = new Pen(pillBorderBrush, 1);
+        _pillFill = _panelDeep;
+        _pillBorderPen = new Pen(this.GetDrawingBrush("BrushBorderLight"), 1);
         _pillBorderPen.Freeze();
 
-        _capFill = new LinearGradientBrush(
-            (Color)FindResource("ColorThumbTop"),
-            (Color)FindResource("ColorThumbBottom"), 90);
+        _capFill = new SolidColorBrush((Color)FindResource("ColorThumbBottom"));
         _capFill.Freeze();
 
-        _capFillHover = new LinearGradientBrush(
-            Color.FromRgb(0x58, 0x58, 0x62),
-            Color.FromRgb(0x3C, 0x3C, 0x44), 90);
+        _capFillHover = new SolidColorBrush((Color)FindResource("ColorThumbTop"));
         _capFillHover.Freeze();
 
-        _capElevationStroke = new LinearGradientBrush(
-            Color.FromArgb(0x48, 0xFF, 0xFF, 0xFF),
-            Color.FromArgb(0x40, 0x00, 0x00, 0x00), 90);
-        _capElevationStroke.Freeze();
-        _capBorderPen = new Pen(_capElevationStroke, 1.2);
+        _capBorderPen = new Pen(this.GetDrawingBrush("BrushBorderLight"), 1);
         _capBorderPen.Freeze();
+        _focusPen = new Pen(_accent, 1.5);
+        _focusPen.Freeze();
 
         _trackArcPen = new Pen(_off, 3) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
         _activeArcPen = new Pen(_accent, 3) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
         _hoverArcPen = new Pen(_accentHover, 3.2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
         _trackArcPen.Freeze(); _activeArcPen.Freeze(); _hoverArcPen.Freeze();
 
-        _pointerNormalPen = new Pen(Brushes.White, 2.2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+        _pointerNormalPen = new Pen(_textPrimary, 2.2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
         _pointerActivePen = new Pen(_accentHover, 2.2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
         _pointerDisabledPen = new Pen(_textDisabled, 2.2) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
         _pointerNormalPen.Freeze(); _pointerActivePen.Freeze(); _pointerDisabledPen.Freeze();
 
-        var tickBrush = new SolidColorBrush(Color.FromArgb(0x45, 0xFF, 0xFF, 0xFF));
-        tickBrush.Freeze();
-        _tickDotPen = new Pen(tickBrush, 1);
-        _tickDotPen.Freeze();
-
-        _labelTypeface = new Typeface(new FontFamily("Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI"), FontStyles.Normal, FontWeights.Medium, FontStretches.Normal);
-        _valueTypeface = new Typeface(new FontFamily("Cascadia Mono, Bahnschrift, Consolas, Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
+        _labelTypeface = new Typeface((FontFamily)FindResource("FontPrimary"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+        _valueTypeface = new Typeface((FontFamily)FindResource("FontMono"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
     }
 
     protected override void OnRender(DrawingContext dc)
@@ -311,6 +316,7 @@ public sealed class KnobControl : FrameworkElement
         double w = ActualWidth, h = ActualHeight;
         if (w < 4 || h < 4) return;
         EnsureResources();
+        dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, w, h));
 
         bool active = _dragging || IsMouseOver;
         double nameH = 15, valueH = 20;
@@ -335,16 +341,17 @@ public sealed class KnobControl : FrameworkElement
         if (t > 0.003 && IsEnabled)
             DrawArc(dc, cx, cy, arcRadius, 135, 270 * t, active ? _hoverArcPen! : _activeArcPen!);
 
-        // 4. 旋钮立体帽 (Fluent 2 Elevation 渐变 + 顶亮底暗描边)
+        // 4. 中性旋钮面，悬停提亮；键盘焦点使用独立强调色轮廓。
         dc.DrawEllipse(active && IsEnabled ? _capFillHover : _capFill, _capBorderPen, new Point(cx, cy), capRadius, capRadius);
+        if (IsKeyboardFocused && IsEnabled)
+            dc.DrawEllipse(null, _focusPen, new Point(cx, cy), capRadius + 2, capRadius + 2);
 
-        // 5. 指针线 + 中心轴心
+        // 5. 清晰指针线
         double ang = (135 + 270 * t) * Math.PI / 180.0;
         var pOuter = new Point(cx + Math.Cos(ang) * (capRadius - 3), cy + Math.Sin(ang) * (capRadius - 3));
         var pInner = new Point(cx + Math.Cos(ang) * (capRadius * 0.28), cy + Math.Sin(ang) * (capRadius * 0.28));
         var pointerPen = !IsEnabled ? _pointerDisabledPen : (active ? _pointerActivePen : _pointerNormalPen);
         dc.DrawLine(pointerPen, pInner, pOuter);
-        dc.DrawEllipse(_panelDeep, null, new Point(cx, cy), 3.0, 3.0);
 
         // 6. 底部数值读数胶囊 (Readout Pill)
         string txt = Step >= 1 ? Value.ToString("0") : Value.ToString("0.##");

@@ -13,9 +13,12 @@ public sealed class LinearFaderControl : FrameworkElement
         Width = 38; Height = 130;
         SnapsToDevicePixels = true;
         UseLayoutRounding = true;
+        Focusable = true;
         Cursor = Cursors.Hand;
         AutomationProperties.SetName(this, "Level");
         IsEnabledChanged += (_, _) => InvalidateVisual();
+        GotKeyboardFocus += (_, _) => InvalidateVisual();
+        LostKeyboardFocus += (_, _) => InvalidateVisual();
     }
 
     public static readonly DependencyProperty ValueProperty = DependencyProperty.Register(
@@ -70,37 +73,33 @@ public sealed class LinearFaderControl : FrameworkElement
 
     // ── 画笔/画刷缓存 ──
     private Brush? _track, _accent, _activeFill;
-    private LinearGradientBrush? _thumbFill, _thumbFillHover, _thumbBorderGrad;
-    private Pen? _trackBorderPen, _tickPen, _thumbPen, _accentPen, _linePen;
+    private Brush? _thumbFill, _thumbFillHover;
+    private Pen? _trackBorderPen, _tickPen, _thumbPen, _accentPen, _linePen, _focusPen;
 
     private void EnsureResources()
     {
         if (_thumbPen is not null) return;
-        _track = (Brush)FindResource("BrushFaderTrack");
-        _accent = (Brush)FindResource("BrushAccent");
-        _activeFill = new SolidColorBrush(Color.FromArgb(0xAA, 0x4C, 0xC2, 0xFF));
+        _track = this.GetDrawingBrush("BrushFaderTrack");
+        _accent = this.GetDrawingBrush("BrushAccent");
+        _activeFill = _accent.Clone();
+        _activeFill.Opacity = 0.75;
         _activeFill.Freeze();
 
-        _thumbFill = new LinearGradientBrush(
-            (Color)FindResource("ColorThumbTop"), (Color)FindResource("ColorThumbBottom"), 90);
+        _thumbFill = new SolidColorBrush((Color)FindResource("ColorThumbBottom"));
         _thumbFill.Freeze();
-        _thumbFillHover = new LinearGradientBrush(
-            Color.FromRgb(0x58, 0x58, 0x62), Color.FromRgb(0x3D, 0x3D, 0x45), 90);
+        _thumbFillHover = new SolidColorBrush((Color)FindResource("ColorThumbTop"));
         _thumbFillHover.Freeze();
-        _thumbBorderGrad = new LinearGradientBrush(
-            Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF), Color.FromArgb(0x50, 0x00, 0x00, 0x00), 90);
-        _thumbBorderGrad.Freeze();
 
-        var trackStroke = new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF));
-        trackStroke.Freeze();
+        var trackStroke = this.GetDrawingBrush("BrushBorderLight");
         _trackBorderPen = new Pen(trackStroke, 1);
         _trackBorderPen.Freeze();
 
-        _tickPen = new Pen((Brush)FindResource("BrushTickMajor"), 1);
-        _thumbPen = new Pen(_thumbBorderGrad, 1);
+        _tickPen = new Pen(this.GetDrawingBrush("BrushTickMajor"), 1);
+        _thumbPen = new Pen(trackStroke, 1);
         _accentPen = new Pen(_accent, 2);
-        _linePen = new Pen((Brush)FindResource("BrushThumbLine"), 2);
-        _tickPen.Freeze(); _thumbPen.Freeze(); _accentPen.Freeze(); _linePen.Freeze();
+        _focusPen = new Pen(_accent, 1.5);
+        _linePen = new Pen(this.GetDrawingBrush("BrushThumbLine"), 2);
+        _tickPen.Freeze(); _thumbPen.Freeze(); _accentPen.Freeze(); _linePen.Freeze(); _focusPen.Freeze();
     }
 
     private double YToValue(double y)
@@ -212,6 +211,7 @@ public sealed class LinearFaderControl : FrameworkElement
         double w = ActualWidth, h = ActualHeight;
         if (w < 4 || h < 4) return;
         EnsureResources();
+        dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, w, h));
         bool active = _dragging || IsMouseOver;
         double cx = w / 2;
 
@@ -229,10 +229,11 @@ public sealed class LinearFaderControl : FrameworkElement
         if (fillH > 1 && IsEnabled)
             dc.DrawRoundedRectangle(_activeFill, null, new Rect(cx - 1.5, topY, 3, fillH), 1.5, 1.5);
 
-        // 立体推子帽
+        // 中性推子帽与独立键盘焦点轮廓
         var thumb = new Rect(cx - 13, y - 6.5, 26, 13);
-        dc.DrawRoundedRectangle(active && IsEnabled ? _thumbFillHover : _thumbFill, _thumbPen, thumb, 3, 3);
-        var gripPen = (Math.Abs(Value - DefaultValue) < 0.5 || active) ? _accentPen : _linePen;
+        dc.DrawRoundedRectangle(active && IsEnabled ? _thumbFillHover : _thumbFill,
+            IsKeyboardFocused && IsEnabled ? _focusPen : _thumbPen, thumb, 3, 3);
+        var gripPen = IsEnabled && (Math.Abs(Value - DefaultValue) < 0.5 || active) ? _accentPen : _linePen;
         double gy = Math.Round(y) + 0.5;
         dc.DrawLine(gripPen, new Point(cx - 8, gy), new Point(cx + 8, gy));
     }

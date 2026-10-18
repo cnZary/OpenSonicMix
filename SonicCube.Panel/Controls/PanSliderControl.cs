@@ -17,9 +17,12 @@ public sealed class PanSliderControl : FrameworkElement
         Height = 32;
         SnapsToDevicePixels = true;
         UseLayoutRounding = true;
+        Focusable = true;
         Cursor = Cursors.Hand;
         AutomationProperties.SetName(this, "Pan");
         IsEnabledChanged += (_, _) => InvalidateVisual();
+        GotKeyboardFocus += (_, _) => InvalidateVisual();
+        LostKeyboardFocus += (_, _) => InvalidateVisual();
     }
 
     public static readonly DependencyProperty ValueProperty = DependencyProperty.Register(
@@ -59,27 +62,27 @@ public sealed class PanSliderControl : FrameworkElement
     }
 
     // ── 画笔/画刷缓存 ──
-    private Pen? _midPen, _thumbPen, _trackBorderPen;
+    private Pen? _midPen, _thumbPen, _trackBorderPen, _focusPen;
     private Brush? _trackBrush, _brushAccent, _brushAccentHover, _brushOff;
     private Typeface? _typeface;
 
     private void EnsureResources()
     {
         if (_midPen is not null) return;
-        _trackBrush = (Brush)FindResource("BrushFaderTrack");
-        _brushAccent = (Brush)FindResource("BrushAccent");
-        _brushAccentHover = (Brush)FindResource("BrushAccentHover");
-        _brushOff = (Brush)FindResource("BrushOff");
+        _trackBrush = this.GetDrawingBrush("BrushFaderTrack");
+        _brushAccent = this.GetDrawingBrush("BrushAccent");
+        _brushAccentHover = this.GetDrawingBrush("BrushAccentHover");
+        _brushOff = this.GetDrawingBrush("BrushOff");
 
-        var trackStroke = new SolidColorBrush(Color.FromArgb(0x24, 0xFF, 0xFF, 0xFF));
-        trackStroke.Freeze();
+        var trackStroke = this.GetDrawingBrush("BrushBorderLight");
         _trackBorderPen = new Pen(trackStroke, 1);
         _trackBorderPen.Freeze();
 
-        _midPen = new Pen((Brush)FindResource("BrushTickMajor"), 1);
-        _thumbPen = new Pen((Brush)FindResource("BrushBorderLight"), 1);
-        _midPen.Freeze(); _thumbPen.Freeze();
-        _typeface = new Typeface(new FontFamily("Cascadia Mono, Bahnschrift, Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
+        _midPen = new Pen(this.GetDrawingBrush("BrushTickMajor"), 1);
+        _thumbPen = new Pen(this.GetDrawingBrush("BrushBorderLight"), 1);
+        _focusPen = new Pen(this.GetDrawingBrush("BrushText"), 1.5);
+        _midPen.Freeze(); _thumbPen.Freeze(); _focusPen.Freeze();
+        _typeface = new Typeface((FontFamily)FindResource("FontMono"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
     }
 
     private double ValueToX(double v) => 8 + (v + 50) / 100.0 * Math.Max(10, ActualWidth - 16);
@@ -179,6 +182,7 @@ public sealed class PanSliderControl : FrameworkElement
         double w = ActualWidth, h = ActualHeight;
         if (w < 16 || h < 12) return;
         EnsureResources();
+        dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, w, h));
         bool active = _dragging || IsMouseOver;
         double cy = h - 9;
         double midX = w / 2;
@@ -210,6 +214,8 @@ public sealed class PanSliderControl : FrameworkElement
         // 5. Fluent 2 圆角滑块帽
         var thumbBrush = !IsEnabled ? _brushOff : (active ? _brushAccentHover : _brushAccent);
         dc.DrawRoundedRectangle(thumbBrush, _thumbPen, new Rect(x - 5.5, cy - 6.5, 11, 13), 3, 3);
+        if (IsKeyboardFocused && IsEnabled)
+            dc.DrawRoundedRectangle(null, _focusPen, new Rect(x - 7.5, cy - 8.5, 15, 17), 5, 5);
     }
 
     private void DrawText(DrawingContext dc, string text, Rect area, Brush brush, double size)

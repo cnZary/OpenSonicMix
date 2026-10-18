@@ -33,7 +33,7 @@ public partial class InputChannelView : UserControl
             // CH2 无 48V:HPF 横跨整行
             Btn48V.Visibility = Visibility.Collapsed;
             System.Windows.Controls.Grid.SetColumnSpan(BtnHpf, 2);
-            BtnHpf.Margin = new Thickness(0, 2, 0, 0);
+            BtnHpf.Margin = new Thickness(0);
         }
         SendKnob.Configure(0, 100, 1, 0, "SEND");
         WireEvents();

@@ -26,12 +26,6 @@ public partial class ReverbView : UserControl
     {
         InitializeComponent();
         AlgSelect.SelectionChanged += (_, _) => OnAlgorithmSelected();
-        AlgSelect.PreviewMouseLeftButtonDown += (_, e) =>
-        {
-            if (AlgSelect.IsDropDownOpen) return;
-            AlgSelect.IsDropDownOpen = true;
-            e.Handled = true;
-        };
         LoadAlgorithms();
         ApplyLocalization();
         Loc.LanguageChanged += ApplyLocalization;
@@ -74,7 +68,7 @@ public partial class ReverbView : UserControl
         for (int i = 0; i < alg.Params.Length; i++)
         {
             var p = alg.Params[i];
-            var knob = new Controls.KnobControl { HorizontalAlignment = HorizontalAlignment.Center };
+            var knob = new Controls.KnobControl { Width = 64, Height = 96, HorizontalAlignment = HorizontalAlignment.Center };
             knob.Configure(p.Min, p.Max, p.Step, p.Default, p.Name);
             int algId = p.AlgId;
             knob.ValueCommitted += v => FxParamRequested?.Invoke(FxCatalog.ModuleRvb, algId, (float)v);

@@ -9,8 +9,8 @@ namespace SonicCube.Panel.Controls;
 /// <summary>
 /// 音量推子(dB 分段线性映射,Fluent 2 风格)。协议 dB(-51~+10)经 ValueMapping 分段映射到等距行程;
 /// 拖动合并节流发送;双击复位 0;滚轮 ±1dB。
-/// 视觉:左侧 dB 数字刻度(0 位高亮)、双缘刻度线、凹陷圆角轨道 + 强调色填充条、
-/// Fluent 2 立体推子帽(渐变面 + 顶部高光 + 双侧凹槽 + 中心抓线)。
+/// 视觉:左侧 dB 数字刻度(0 位高亮)、双缘刻度线、圆角轨道 + 系统强调色填充条、
+/// 中性推子帽与清晰的悬停、键盘焦点反馈。
 /// </summary>
 public sealed class VolumeFaderControl : FrameworkElement
 {
@@ -19,9 +19,12 @@ public sealed class VolumeFaderControl : FrameworkElement
         Width = 50;
         SnapsToDevicePixels = true;
         UseLayoutRounding = true;
+        Focusable = true;
         Cursor = Cursors.Hand;
         AutomationProperties.SetName(this, "Volume fader");
         IsEnabledChanged += (_, _) => InvalidateVisual();
+        GotKeyboardFocus += (_, _) => InvalidateVisual();
+        LostKeyboardFocus += (_, _) => InvalidateVisual();
     }
 
     public static readonly DependencyProperty DbProperty = DependencyProperty.Register(
@@ -201,57 +204,42 @@ public sealed class VolumeFaderControl : FrameworkElement
 
     // ── 画刷/文字资源缓存 ──
     private Brush? _tick, _text, _textHi, _track, _thumbLine, _accent, _activeFill;
-    private LinearGradientBrush? _thumbFill, _thumbFillHover, _thumbElevationBorder;
-    private Pen? _tickPen, _zeroTickPen, _trackBorderPen, _thumbBorderPen, _thumbHighlightPen, _thumbGroovePen, _thumbLinePen, _thumbLineAccentPen;
+    private Brush? _thumbFill, _thumbFillHover;
+    private Pen? _tickPen, _zeroTickPen, _trackBorderPen, _thumbBorderPen, _thumbLinePen, _thumbLineAccentPen, _focusPen;
     private Typeface? _typeface;
 
     private void EnsureResources()
     {
         if (_thumbLine is not null) return;
-        _tick = (Brush)FindResource("BrushTickMajor");
-        _text = (Brush)FindResource("BrushTextDisabled");
-        _textHi = (Brush)FindResource("BrushTextSecondary");
-        _track = (Brush)FindResource("BrushFaderTrack");
-        _thumbLine = (Brush)FindResource("BrushThumbLine");
-        _accent = (Brush)FindResource("BrushAccent");
+        _tick = this.GetDrawingBrush("BrushTickMajor");
+        _text = this.GetDrawingBrush("BrushTextTertiary");
+        _textHi = this.GetDrawingBrush("BrushTextSecondary");
+        _track = this.GetDrawingBrush("BrushFaderTrack");
+        _thumbLine = this.GetDrawingBrush("BrushThumbLine");
+        _accent = this.GetDrawingBrush("BrushAccent");
 
-        _activeFill = new SolidColorBrush(Color.FromArgb(0xAA, 0x4C, 0xC2, 0xFF));
+        _activeFill = _accent.Clone();
+        _activeFill.Opacity = 0.75;
         _activeFill.Freeze();
 
-        _thumbFill = new LinearGradientBrush(
-            (Color)FindResource("ColorThumbTop"), (Color)FindResource("ColorThumbBottom"), 90);
+        _thumbFill = new SolidColorBrush((Color)FindResource("ColorThumbBottom"));
         _thumbFill.Freeze();
 
-        _thumbFillHover = new LinearGradientBrush(
-            Color.FromRgb(0x58, 0x58, 0x62), Color.FromRgb(0x3D, 0x3D, 0x45), 90);
+        _thumbFillHover = new SolidColorBrush((Color)FindResource("ColorThumbTop"));
         _thumbFillHover.Freeze();
 
-        _thumbElevationBorder = new LinearGradientBrush(
-            Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF), Color.FromArgb(0x50, 0x00, 0x00, 0x00), 90);
-        _thumbElevationBorder.Freeze();
-
-        var trackStroke = new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF));
-        trackStroke.Freeze();
+        var trackStroke = this.GetDrawingBrush("BrushBorderLight");
         _trackBorderPen = new Pen(trackStroke, 1);
         _trackBorderPen.Freeze();
 
-        var topHighlight = new SolidColorBrush(Color.FromArgb(0x38, 0xFF, 0xFF, 0xFF));
-        topHighlight.Freeze();
-        _thumbHighlightPen = new Pen(topHighlight, 1);
-        _thumbHighlightPen.Freeze();
-
-        var grooveBrush = new SolidColorBrush(Color.FromArgb(0x55, 0x00, 0x00, 0x00));
-        grooveBrush.Freeze();
-        _thumbGroovePen = new Pen(grooveBrush, 1);
-        _thumbGroovePen.Freeze();
-
         _tickPen = new Pen(_tick, 1);
         _zeroTickPen = new Pen(_textHi, 1.2);
-        _thumbBorderPen = new Pen(_thumbElevationBorder, 1);
+        _thumbBorderPen = new Pen(trackStroke, 1);
         _thumbLinePen = new Pen(_thumbLine, 2);
         _thumbLineAccentPen = new Pen(_accent, 2);
-        _tickPen.Freeze(); _zeroTickPen.Freeze(); _thumbBorderPen.Freeze(); _thumbLinePen.Freeze(); _thumbLineAccentPen.Freeze();
-        _typeface = new Typeface(new FontFamily("Cascadia Mono, Bahnschrift, Segoe UI"), FontStyles.Normal, FontWeights.Medium, FontStretches.Normal);
+        _focusPen = new Pen(_accent, 1.5);
+        _tickPen.Freeze(); _zeroTickPen.Freeze(); _thumbBorderPen.Freeze(); _thumbLinePen.Freeze(); _thumbLineAccentPen.Freeze(); _focusPen.Freeze();
+        _typeface = new Typeface((FontFamily)FindResource("FontMono"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
     }
 
     // 刻度为静态内容:启动时格式化一次,并按尺寸/DPI 预烘焙静态刻度与轨道背景。
@@ -305,6 +293,7 @@ public sealed class VolumeFaderControl : FrameworkElement
         double w = ActualWidth, h = ActualHeight;
         if (w < 20 || h < 20) return;
         EnsureResources();
+        dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, w, h));
         EnsureStaticCache(w, h);
         bool active = _dragging || IsMouseOver;
         double cx = w / 2 + 4;   // 轨道中心右移,左侧留出 dB 数字刻度
@@ -320,16 +309,14 @@ public sealed class VolumeFaderControl : FrameworkElement
             dc.DrawRoundedRectangle(_activeFill, null, fillRect, 1.5, 1.5);
         }
 
-        // 4. Fluent 2 立体推子帽 (Thumb: 28×14, 圆角 3px + 顶部高光 + 上下凹槽 + 中心抓线)
+        // 4. 中性推子帽 (28×14)，保留一条清晰抓线。
         var thumb = new Rect(cx - 14, thumbY - 7, 28, 14);
-        dc.DrawRoundedRectangle(active && IsEnabled ? _thumbFillHover : _thumbFill, _thumbBorderPen, thumb, 3, 3);
-        dc.DrawLine(_thumbHighlightPen, new Point(thumb.X + 2.5, thumb.Y + 1.5), new Point(thumb.Right - 2.5, thumb.Y + 1.5));
+        dc.DrawRoundedRectangle(active && IsEnabled ? _thumbFillHover : _thumbFill,
+            IsKeyboardFocused && IsEnabled ? _focusPen : _thumbBorderPen, thumb, 3, 3);
 
         double gy = Math.Round(thumbY) + 0.5;
-        dc.DrawLine(_thumbGroovePen, new Point(cx - 8, gy - 3), new Point(cx + 8, gy - 3));
-        dc.DrawLine(_thumbGroovePen, new Point(cx - 8, gy + 3), new Point(cx + 8, gy + 3));
 
-        var gripPen = (Math.Abs(Db) < 0.05 || active) ? _thumbLineAccentPen : _thumbLinePen;
+        var gripPen = IsEnabled && (Math.Abs(Db) < 0.05 || active) ? _thumbLineAccentPen : _thumbLinePen;
         dc.DrawLine(gripPen, new Point(cx - 9, gy), new Point(cx + 9, gy));
     }
 }

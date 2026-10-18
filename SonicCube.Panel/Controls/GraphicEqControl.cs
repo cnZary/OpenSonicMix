@@ -47,7 +47,7 @@ public sealed class GraphicEqControl : FrameworkElement
     private double PointY(int i) => ValueMapping.EqGainToNorm(_gain[i]) * ActualHeight;
 
     // ── 画刷/画笔缓存 ──
-    private Brush? _bgBrush, _axisTextBrush, _badgeBgBrush;
+    private Brush? _bgBrush, _axisTextBrush, _badgeBgBrush, _textBrush;
     private LinearGradientBrush? _curveAreaFill;
     private Pen? _gridPen, _zeroPen, _curvePen, _pointPen, _badgeBorderPen;
     private Brush[]? _pointBrushes;
@@ -57,12 +57,13 @@ public sealed class GraphicEqControl : FrameworkElement
     private void EnsureResources()
     {
         if (_pointBrushes is not null) return;
-        _bgBrush = (Brush)FindResource("BrushMeterTrack");
-        _axisTextBrush = (Brush)FindResource("BrushTextDisabled");
-        var accent = (Color)FindResource("ColorAccent");
+        _bgBrush = this.GetDrawingBrush("BrushMeterTrack");
+        _axisTextBrush = this.GetDrawingBrush("BrushTextTertiary");
+        _textBrush = this.GetDrawingBrush("BrushText");
+        var accent = ((SolidColorBrush)FindResource("BrushAccent")).Color;
 
         _curveAreaFill = new LinearGradientBrush(
-            Color.FromArgb(0x48, accent.R, accent.G, accent.B),
+            Color.FromArgb(0x28, accent.R, accent.G, accent.B),
             Color.FromArgb(0x06, accent.R, accent.G, accent.B), 90);
         _curveAreaFill.Freeze();
 
@@ -76,7 +77,7 @@ public sealed class GraphicEqControl : FrameworkElement
         _zeroPen = new Pen(zeroBrush, 1);
         _zeroPen.Freeze();
 
-        _curvePen = new Pen((Brush)FindResource("BrushAccent"), 2.2)
+        _curvePen = new Pen(this.GetDrawingBrush("BrushAccent"), 2.2)
         {
             StartLineCap = PenLineCap.Round,
             EndLineCap = PenLineCap.Round,
@@ -84,13 +85,11 @@ public sealed class GraphicEqControl : FrameworkElement
         };
         _curvePen.Freeze();
 
-        _pointPen = new Pen(Brushes.White, 1.5);
+        _pointPen = new Pen(_textBrush, 1.5);
         _pointPen.Freeze();
 
-        _badgeBgBrush = new SolidColorBrush(Color.FromArgb(0xCC, 0x1E, 0x1E, 0x24));
-        _badgeBgBrush.Freeze();
-        var badgeBorder = new SolidColorBrush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF));
-        badgeBorder.Freeze();
+        _badgeBgBrush = this.GetDrawingBrush("BrushPanelDeep");
+        var badgeBorder = this.GetDrawingBrush("BrushBorderLight");
         _badgeBorderPen = new Pen(badgeBorder, 1);
         _badgeBorderPen.Freeze();
 
@@ -112,7 +111,7 @@ public sealed class GraphicEqControl : FrameworkElement
         foreach (var b in _pointBrushes) b.Freeze();
         foreach (var b in _haloBrushes) b.Freeze();
 
-        _typeface = new Typeface(new FontFamily("Cascadia Mono, Bahnschrift, Segoe UI"), FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
+        _typeface = new Typeface((FontFamily)FindResource("FontMono"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
     }
 
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
@@ -299,17 +298,17 @@ public sealed class GraphicEqControl : FrameworkElement
         dc.DrawGeometry(_curveAreaFill, null, fillGeo);
         dc.DrawGeometry(null, _curvePen, strokeGeo);
 
-        // 3. 三频段控制点(含光晕与胶囊标签)
-        var textBrush = (Brush)FindResource("BrushText");
+        // 3. 三频段控制点，仅悬停/拖动时显示反馈环。
         for (int i = 0; i < 3; i++)
         {
             double x = PointX(i), y = PointY(i);
             bool active = i == _dragIndex || i == _hoverIndex;
-            dc.DrawEllipse(_haloBrushes![i], null, new Point(x, y), active ? 13 : 10, active ? 13 : 10);
+            if (active)
+                dc.DrawEllipse(_haloBrushes![i], null, new Point(x, y), 12, 12);
             dc.DrawEllipse(_pointBrushes![i], _pointPen, new Point(x, y), active ? 7 : 6, active ? 7 : 6);
 
             string txt = $"{FormatFreq(_freq[i])} {_gain[i]:+0;-0;0}dB" + (i == 1 ? $" Q{_q:0.##}" : "");
-            DrawBadge(dc, txt, new Point(x, y < 28 ? y + 18 : y - 18), textBrush, dpi, w);
+            DrawBadge(dc, txt, new Point(x, y < 28 ? y + 18 : y - 18), _textBrush!, dpi, w);
         }
     }
 

@@ -276,21 +276,20 @@ public sealed class MeterBar : FrameworkElement
     private void EnsureBrushes()
     {
         if (_fill is not null) return;
-        _track = (Brush)FindResource("BrushMeterTrack");
-        _tick = (Brush)FindResource("BrushTickMajor");
-        _peakWhite = (Brush)FindResource("BrushThumbLine");
-        _peakWarn = (Brush)FindResource("BrushWarn");
-        _scaleText = (Brush)FindResource("BrushTextDisabled");
-        _scaleTextHi = (Brush)FindResource("BrushTextSecondary");
+        _track = this.GetDrawingBrush("BrushMeterTrack");
+        _tick = this.GetDrawingBrush("BrushTickMajor");
+        _peakWhite = this.GetDrawingBrush("BrushThumbLine");
+        _peakWarn = this.GetDrawingBrush("BrushWarn");
+        _scaleText = this.GetDrawingBrush("BrushTextTertiary");
+        _scaleTextHi = this.GetDrawingBrush("BrushTextSecondary");
 
-        var trackBorder = new SolidColorBrush(Color.FromArgb(0x20, 0xFF, 0xFF, 0xFF));
-        trackBorder.Freeze();
+        var trackBorder = this.GetDrawingBrush("BrushBorderLight");
         _trackPen = new Pen(trackBorder, 1);
         _tickPen = new Pen(_tick, 1);
         _peakWhitePen = new Pen(_peakWhite, 1.2);
         _peakWarnPen = new Pen(_peakWarn, 1.4);
         _trackPen.Freeze(); _tickPen.Freeze(); _peakWhitePen.Freeze(); _peakWarnPen.Freeze();
-        _typeface = new Typeface(new FontFamily("Cascadia Mono, Bahnschrift, Segoe UI"), FontStyles.Normal, FontWeights.Medium, FontStretches.Normal);
+        _typeface = new Typeface((FontFamily)FindResource("FontMono"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
 
         // 电平条渐变:坐标映射到整根轨道(0=底/-60dB,1=顶/0dB)。
         var green = (Color)FindResource("ColorMeterGreen");
@@ -323,7 +322,7 @@ public sealed class MeterBar : FrameworkElement
 
     private FormattedText CreateScaleLabel(int i, Brush brush, double dpi) => new(
         ScaleLabels[i], System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
-        _typeface!, 7.5, brush, dpi);
+        _typeface!, 8, brush, dpi);
 
     private void EnsureStaticCache(double w, double h)
     {

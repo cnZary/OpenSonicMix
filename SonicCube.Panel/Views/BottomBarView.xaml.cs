@@ -55,6 +55,7 @@ public partial class BottomBarView : UserControl
         BtnEfx.Content = Loc.Get("Efx");
         BtnMonitor.Content = Loc.Get("Monitor");
         BtnOnAir.Content = Loc.Get("OnAir");
-        MenuBtn.Content = $"⚙  {Loc.Get("Menu")}";
+        SettingsLabel.Text = Loc.Get("Settings");
+        System.Windows.Automation.AutomationProperties.SetName(MenuBtn, Loc.Get("Settings"));
     }
 }

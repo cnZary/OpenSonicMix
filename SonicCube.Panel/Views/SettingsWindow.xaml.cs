@@ -36,13 +36,6 @@ public partial class SettingsWindow : Window
     private void WireEvents()
     {
         Lang.SelectionChanged += async (_, _) => await OnLanguageChangedAsync();
-        // 自定义模板为非交互,补整框点击展开
-        Lang.PreviewMouseLeftButtonDown += (_, e) =>
-        {
-            if (Lang.IsDropDownOpen) return;
-            Lang.IsDropDownOpen = true;
-            e.Handled = true;
-        };
         StartWithWindows.Checked += async (_, _) => await SaveAsync();
         StartWithWindows.Unchecked += async (_, _) => await SaveAsync();
         ModeLow.Checked += async (_, _) => await OnModeChangedAsync();
@@ -194,6 +187,7 @@ public partial class SettingsWindow : Window
     private void ApplyLocalization()
     {
         Title = Loc.Get("Settings");
+        SettingsHeading.Text = Loc.Get("Settings");
         GGeneral.Header = Loc.Get("General");
         GConn.Header = Loc.Get("Connection");
         GStartup.Header = Loc.Get("StartupBehavior");

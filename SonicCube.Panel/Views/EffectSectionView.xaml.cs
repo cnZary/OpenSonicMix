@@ -7,7 +7,7 @@ using SonicCube.Protocol.Models;
 namespace SonicCube.Panel.Views;
 
 /// <summary>
-/// 输入效果编辑区。顶部 MIC1 / LINE/INST 2 页签 + 左侧完全重置(整机)+ 右侧重置当前模块;
+/// 输入效果编辑区。顶部同一行显示 MIC1 / LINE/INST 2 页签与重置操作;
 /// 左侧窄模块选择列;右侧当前模块编辑区(算法下拉 + 参数旋钮)。
 /// 页签切换只改编辑对象,不发协议。完全重置为整台设备复位(0x00020013),需确认;
 /// 重置当前模块 = 关闭该模块开关并把当前算法参数写回默认值,需确认。
@@ -85,9 +85,9 @@ public partial class EffectSectionView : UserControl
             Content = Loc.Get(key),
             Style = (Style)FindResource("NavModuleToggle"),
             Width = 72,
-            Height = 36,
+            Height = 32,
             FontSize = 12,
-            Margin = new Thickness(0, 3, 0, 3),
+            Margin = new Thickness(0, 0, 0, 8),
             Tag = uiIndex,
         };
         b.Click += (_, _) => { if (!_suppressTab) SelectModule(uiIndex); };
@@ -166,7 +166,7 @@ public partial class EffectSectionView : UserControl
     private UIElement CreateHpf()
     {
         // HPF 选择:每通道 75Hz / 100Hz 互斥(LOWCUT),未开启 HpfSw 时盖 BYPASS 遮罩。
-        var panel = new StackPanel { Margin = new Thickness(12, 16, 12, 16), VerticalAlignment = VerticalAlignment.Center };
+        var panel = new StackPanel { Margin = new Thickness(0, 8, 0, 8), VerticalAlignment = VerticalAlignment.Center };
         _hpfBtns = new System.Windows.Controls.Primitives.ToggleButton[2, 2];
         _hpfLabels = new TextBlock[2];
         _hpfMasks = new Border[2];
@@ -183,7 +183,8 @@ public partial class EffectSectionView : UserControl
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             var label = new TextBlock
             {
-                Style = (Style)FindResource("TitleText"),
+                Style = (Style)FindResource("LabelText"),
+                FontWeight = FontWeights.SemiBold,
                 HorizontalAlignment = HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Center,
                 Text = Loc.Get(ch == 0 ? "ChMic1" : "ChLineInst2"),
@@ -198,8 +199,8 @@ public partial class EffectSectionView : UserControl
                 {
                     Content = opt == 0 ? "75 Hz" : "100 Hz",
                     Style = (Style)FindResource("ChannelToggle"),
-                    Width = 78,
-                    Margin = new Thickness(6, 0, 0, 0),
+                    Width = 72,
+                    Margin = new Thickness(8, 0, 0, 0),
                 };
                 int cch = ch, copt = opt;
                 b.Click += (_, _) => OnHpfSelected(cch, copt);
@@ -212,16 +213,16 @@ public partial class EffectSectionView : UserControl
 
             var mask = new Border
             {
-                Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xB8, 0x16, 0x16, 0x1A)),
-                CornerRadius = new CornerRadius(5),
+                Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0xD9, 0x20, 0x20, 0x20)),
+                CornerRadius = new CornerRadius(4),
                 Visibility = Visibility.Collapsed,
                 Child = new Border
                 {
-                    Background = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x26, 0xFF, 0xFF, 0xFF)),
-                    BorderBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x28, 0xFF, 0xFF, 0xFF)),
+                    Background = (System.Windows.Media.Brush)FindResource("BrushControl"),
+                    BorderBrush = (System.Windows.Media.Brush)FindResource("BrushDivider"),
                     BorderThickness = new Thickness(1),
                     CornerRadius = new CornerRadius(4),
-                    Padding = new Thickness(10, 2, 10, 2),
+                    Padding = new Thickness(12, 4, 12, 4),
                     HorizontalAlignment = HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center,
                     Child = new TextBlock

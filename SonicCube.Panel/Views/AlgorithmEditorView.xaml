@@ -5,17 +5,17 @@
   <Grid>
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto"/>   <!-- 算法下拉 -->
-      <RowDefinition Height="*"/>      <!-- 参数旋钮区 -->
+      <RowDefinition Height="*"/>      <!-- 参数编辑区 -->
     </Grid.RowDefinitions>
     <ComboBox x:Name="AlgSelect" Grid.Row="0" Margin="0,0,0,8" Style="{StaticResource MixerCombo}"
               ItemContainerStyle="{StaticResource MixerComboItem}"/>
-    <Border Grid.Row="1" Background="#12FFFFFF" BorderBrush="#14FFFFFF"
-            BorderThickness="1" CornerRadius="6" Padding="6,6,6,4">
-      <Grid x:Name="KnobHost"/>
-    </Border>
+    <ScrollViewer x:Name="ParameterScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                  Margin="0,4,0,0" CanContentScroll="False">
+      <Grid x:Name="KnobHost" VerticalAlignment="Top"/>
+    </ScrollViewer>
     <!-- 模块未使能遮罩 -->
-    <Border x:Name="Mask" Grid.RowSpan="2" Background="#B816161A" CornerRadius="6" Visibility="Collapsed" Panel.ZIndex="10">
-      <Border Background="#26FFFFFF" BorderBrush="#28FFFFFF" BorderThickness="1" CornerRadius="4"
+    <Border x:Name="Mask" Grid.RowSpan="2" Background="#D9202020" CornerRadius="4" Visibility="Collapsed" Panel.ZIndex="10">
+      <Border Background="{StaticResource BrushControl}" BorderBrush="{StaticResource BrushDivider}" BorderThickness="1" CornerRadius="4"
               Padding="12,4" HorizontalAlignment="Center" VerticalAlignment="Center">
         <TextBlock Text="BYPASS" FontFamily="{StaticResource FontMono}" FontSize="11" FontWeight="SemiBold"
                    Foreground="{StaticResource BrushTextSecondary}"/>
