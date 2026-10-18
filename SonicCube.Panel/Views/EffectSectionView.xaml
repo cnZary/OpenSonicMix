@@ -28,7 +28,7 @@
           <ColumnDefinition Width="Auto"/>
           <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
-        <StackPanel x:Name="ModuleList" Grid.Column="0" VerticalAlignment="Top" Margin="0,0,12,0"/>
+        <StackPanel x:Name="ModuleList" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,12,0"/>
         <Border Grid.Column="1" Style="{StaticResource InsetWellBorder}" Padding="8">
           <ContentControl x:Name="EditorHost" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"/>
         </Border>

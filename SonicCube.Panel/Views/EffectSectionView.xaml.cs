@@ -87,7 +87,7 @@ public partial class EffectSectionView : UserControl
             Width = 72,
             Height = 32,
             FontSize = 12,
-            Margin = new Thickness(0, 0, 0, 8),
+            Margin = new Thickness(0, ModuleList.Children.Count == 0 ? 0 : 8, 0, 0),
             Tag = uiIndex,
         };
         b.Click += (_, _) => { if (!_suppressTab) SelectModule(uiIndex); };
