@@ -9,10 +9,9 @@
     </Grid.RowDefinitions>
     <ComboBox x:Name="AlgSelect" Grid.Row="0" Margin="0,0,0,8" Style="{StaticResource MixerCombo}"
               ItemContainerStyle="{StaticResource MixerComboItem}"/>
-    <ScrollViewer x:Name="ParameterScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
-                  Margin="0,4,0,0" CanContentScroll="False">
-      <Grid x:Name="KnobHost" VerticalAlignment="Top"/>
-    </ScrollViewer>
+    <Border Grid.Row="1" Margin="0,4,0,0">
+      <Grid x:Name="KnobHost"/>
+    </Border>
     <!-- 模块未使能遮罩 -->
     <Border x:Name="Mask" Grid.RowSpan="2" Background="#D9202020" CornerRadius="4" Visibility="Collapsed" Panel.ZIndex="10">
       <Border Background="{StaticResource BrushControl}" BorderBrush="{StaticResource BrushDivider}" BorderThickness="1" CornerRadius="4"
