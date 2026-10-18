@@ -3,8 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:v="clr-namespace:SonicCube.Panel.Views"
         Title="SonicCubePanel"
-        Width="1240" Height="900"
-        MinWidth="1120" MinHeight="760"
+        Width="1240" Height="940"
+        MinWidth="1120" MinHeight="840"
         Background="{StaticResource BrushWindow}"
         Foreground="{StaticResource BrushText}"
         FontFamily="{StaticResource FontPrimary}"
@@ -36,7 +36,7 @@
       <!-- 中央:上方效果编辑,下方回放+混响 -->
       <Grid Grid.Column="4">
         <Grid.RowDefinitions>
-          <RowDefinition Height="260"/>
+          <RowDefinition Height="284"/>
           <RowDefinition Height="*" MinHeight="296"/>
         </Grid.RowDefinitions>
         <v:EffectSectionView x:Name="Fx" Grid.Row="0" Margin="0,0,0,12"/>
