@@ -6,9 +6,9 @@ namespace SonicCube.Tray.Settings;
 /// <summary>MIDI 工作模式。</summary>
 public enum WorkMode
 {
-    /// <summary>低占用模式(默认)。</summary>
+    /// <summary>低占用模式。</summary>
     LowResource,
-    /// <summary>快速连接模式(保持连接)。</summary>
+    /// <summary>快速连接模式(默认,保持连接)。</summary>
     FastConnection,
 }
 
@@ -18,7 +18,7 @@ public sealed class AppSettings
     [JsonPropertyName("version")] public int Version { get; set; } = 1;
     [JsonPropertyName("language")] public string Language { get; set; } = "auto";
     [JsonPropertyName("startWithWindows")] public bool StartWithWindows { get; set; } = false;
-    [JsonPropertyName("workMode")] public string WorkModeValue { get; set; } = "lowResource";
+    [JsonPropertyName("workMode")] public string WorkModeValue { get; set; } = "fastConnection";
     [JsonPropertyName("idleDisconnectSeconds")] public int IdleDisconnectSeconds { get; set; } = 60;
     [JsonPropertyName("startup")] public StartupSettings Startup { get; set; } = new();
     [JsonPropertyName("panel")] public PanelSettings Panel { get; set; } = new();
@@ -35,8 +35,8 @@ public sealed class AppSettings
 
 public sealed class StartupSettings
 {
-    [JsonPropertyName("enable48V")] public bool Enable48V { get; set; } = true;
-    [JsonPropertyName("enableEFX")] public bool EnableEFX { get; set; } = true;
+    [JsonPropertyName("enable48V")] public bool Enable48V { get; set; } = false;
+    [JsonPropertyName("enableEFX")] public bool EnableEFX { get; set; } = false;
     [JsonPropertyName("reapplyOnReconnect")] public bool ReapplyOnReconnect { get; set; } = true;
     [JsonPropertyName("phantomPowerConsent")] public bool PhantomPowerConsent { get; set; } = false;
 }

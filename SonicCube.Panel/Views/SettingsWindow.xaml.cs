@@ -57,11 +57,11 @@ public partial class SettingsWindow : Window
         _loading = true;
         Lang.SelectedIndex = s.Language switch { "en-US" => 1, "zh-CN" => 2, _ => 0 };
         StartWithWindows.IsChecked = s.StartWithWindows ?? false;
-        bool fast = string.Equals(s.WorkMode, "fastConnection", StringComparison.OrdinalIgnoreCase);
+        bool fast = string.Equals(s.WorkMode ?? "fastConnection", "fastConnection", StringComparison.OrdinalIgnoreCase);
         ModeFast.IsChecked = fast;
         ModeLow.IsChecked = !fast;
-        Enable48V.IsChecked = s.Enable48V ?? true;
-        EnableEFX.IsChecked = s.EnableEFX ?? true;
+        Enable48V.IsChecked = s.Enable48V ?? false;
+        EnableEFX.IsChecked = s.EnableEFX ?? false;
         Reapply.IsChecked = s.ReapplyOnReconnect ?? true;
         AlwaysOnTop.IsChecked = s.AlwaysOnTop ?? false;
         UpdateReapplyEnabled(fast);
@@ -107,7 +107,7 @@ public partial class SettingsWindow : Window
         var dlg = new Window
         {
             Title = Loc.Get("PhantomWarningTitle"),
-            Width = 460, Height = 240,
+            Width = 460, SizeToContent = SizeToContent.Height,
             Owner = this,
             Background = (System.Windows.Media.Brush)FindResource("BrushWindow"),
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
