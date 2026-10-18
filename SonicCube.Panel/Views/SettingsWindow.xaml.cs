@@ -187,7 +187,6 @@ public partial class SettingsWindow : Window
     private void ApplyLocalization()
     {
         Title = Loc.Get("Settings");
-        SettingsHeading.Text = Loc.Get("Settings");
         GGeneral.Header = Loc.Get("General");
         GConn.Header = Loc.Get("Connection");
         GStartup.Header = Loc.Get("StartupBehavior");

@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:v="clr-namespace:SonicCube.Panel.Views"
         Title="SonicCubePanel"
-        Width="1240" Height="940"
+        Width="1140" Height="940"
         MinWidth="1120" MinHeight="840"
         Background="{StaticResource BrushWindow}"
         Foreground="{StaticResource BrushText}"

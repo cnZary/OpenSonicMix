@@ -374,9 +374,9 @@
         <ControlTemplate TargetType="GroupBox">
           <Border Background="{StaticResource BrushCardSurface}"
                   BorderBrush="{StaticResource BrushCardElevationBorder}"
-                  BorderThickness="1" CornerRadius="8" Padding="14,10,14,12">
+                  BorderThickness="1" CornerRadius="8" Padding="12,8">
             <StackPanel>
-              <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                 <Rectangle Width="3" Height="13" RadiusX="1.5" RadiusY="1.5"
                            Fill="{StaticResource BrushAccent}" VerticalAlignment="Center" Margin="0,0,7,0"/>
                 <ContentPresenter ContentSource="Header" VerticalAlignment="Center"
