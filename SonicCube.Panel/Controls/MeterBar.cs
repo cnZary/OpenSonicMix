@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using SonicCube.Protocol.Models;
 
@@ -11,7 +12,8 @@ namespace SonicCube.Panel.Controls;
 /// 输入为协议 dB;内部以“满刻度比例 0..1”渲染(dB≤-60→0,dB≥0→1)。
 /// 快攻慢放 + 峰值保持:按实际经过时间计算,不按帧数。
 /// 所有实例统一由静态 CompositionTarget.Rendering 驱动(单一订阅,窗口关闭或电平静止时解除,来信号零延迟唤醒)。
-/// 最小化/不可见时暂停绘制;静态背景槽、dB 刻度文字与分段横纹几何体按尺寸预烘焙缓存。
+/// 最小化/不可见时暂停绘制;静态背景(槽、刻度线、dB 数字)与满高渐变+横纹填充按尺寸/DPI 预烘焙为位图,
+/// 逐帧仅剩位图 blit + 峰值线,文本/几何/渐变不再逐帧光栅化,也不再有每帧分配。
 /// 视觉:分段渐变电平条(绿→黄→红,分界处颜色连续)、右侧 dB 刻度尺(数字 + 刻度线)、双段式峰值保持线。
 /// </summary>
 public sealed class MeterBar : FrameworkElement
@@ -262,11 +264,14 @@ public sealed class MeterBar : FrameworkElement
     private Typeface? _typeface;
     private LinearGradientBrush? _fill;      // 电平条渐变(绿→黄→红,分界连续)
 
-    // 按控件尺寸/DPI 预烘焙的静态缓存
+    // 按控件尺寸/DPI 预烘焙的位图缓存
     private double _cachedW, _cachedH, _cachedDpi;
     private double _cachedYTop, _cachedTrackH, _cachedBarW;
-    private DrawingGroup? _staticBackdrop;   // L/R 圆角槽 + 右侧刻度线 + dB 数字
-    private GeometryDrawing?[] _segmentOverlays = new GeometryDrawing?[2]; // L/R 预烘焙横纹间隙
+    private RenderTargetBitmap? _backdropBmp;  // 整表背景:L/R 圆角槽 + 右侧刻度线 + dB 数字
+    private RenderTargetBitmap? _fillBmp;      // 单声道满高填充:渐变 + 横纹间隙(两声道内容一致,共用一张,bar 局部坐标)
+    private double _backdropDestW, _backdropDestH; // 位图目标绘制尺寸(= 像素/dpi,保证 1:1 不缩放模糊)
+    private double _fillDestW, _fillDestH;
+    private RectangleGeometry[]? _clipGeo;     // 每声道缓存的裁剪几何,逐帧仅改 Rect,避免每帧分配
 
     private void EnsureBrushes()
     {
@@ -323,7 +328,7 @@ public sealed class MeterBar : FrameworkElement
     private void EnsureStaticCache(double w, double h)
     {
         double dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
-        if (_staticBackdrop is not null
+        if (_backdropBmp is not null
             && Math.Abs(w - _cachedW) < 0.05
             && Math.Abs(h - _cachedH) < 0.05
             && Math.Abs(dpi - _cachedDpi) < 0.001)
@@ -368,35 +373,59 @@ public sealed class MeterBar : FrameworkElement
             }
         }
         backdrop.Freeze();
-        _staticBackdrop = backdrop;
 
-        // 3. 预烘焙 L/R 分段横纹间隙(替代每帧 DrawingBrush TileMode.Tile 采样)
+        // 背景一次性烘焙为位图(设备像素,向上取整保证内容不被裁;绘制时按 像素/dpi 目标尺寸 1:1 blit)
+        int pixW = Math.Max(1, (int)Math.Ceiling(w * dpi));
+        int pixH = Math.Max(1, (int)Math.Ceiling(h * dpi));
+        var backVis = new DrawingVisual();
+        using (var bdc = backVis.RenderOpen())
+            bdc.DrawDrawing(backdrop);
+        var backBmp = new RenderTargetBitmap(pixW, pixH, 96 * dpi, 96 * dpi, PixelFormats.Pbgra32);
+        backBmp.Render(backVis);
+        backBmp.Freeze();
+        _backdropBmp = backBmp;
+        _backdropDestW = pixW / dpi;
+        _backdropDestH = pixH / dpi;
+
+        // 满高填充(渐变 + 横纹间隙)烘焙为单张位图,两声道内容一致共用;bar 局部坐标 [0,bw]×[0,trackH]
         double yBottom = yTop + trackH;
-        for (int ch = 0; ch < 2; ch++)
+        double bw = Math.Max(1, barW - 1);
+        var segGeo = new StreamGeometry();
+        using (var ctx = segGeo.Open())
         {
-            double bx = ch * (barW + Gap) + 0.5;
-            double bw = Math.Max(1, barW - 1);
-            var segGeo = new StreamGeometry();
-            using (var ctx = segGeo.Open())
+            // 与原 Viewport=(0,0,1,4.5) 瓦片中 [3..4.5] 区间完全对齐
+            double firstTileY = Math.Floor(yTop / 4.5) * 4.5;
+            for (double tileY = firstTileY; tileY < yBottom; tileY += 4.5)
             {
-                // 与原 Viewport=(0,0,1,4.5) 瓦片中 [3..4.5] 区间完全对齐
-                double firstTileY = Math.Floor(yTop / 4.5) * 4.5;
-                for (double tileY = firstTileY; tileY < yBottom; tileY += 4.5)
-                {
-                    double sy0 = Math.Max(yTop, tileY + 3.0);
-                    double sy1 = Math.Min(yBottom, tileY + 4.5);
-                    if (sy1 <= sy0) continue;
-                    ctx.BeginFigure(new Point(bx, sy0), true, true);
-                    ctx.LineTo(new Point(bx + bw, sy0), false, false);
-                    ctx.LineTo(new Point(bx + bw, sy1), false, false);
-                    ctx.LineTo(new Point(bx, sy1), false, false);
-                }
+                double sy0 = Math.Max(0, tileY + 3.0 - yTop);
+                double sy1 = Math.Min(trackH, tileY + 4.5 - yTop);
+                if (sy1 <= sy0) continue;
+                ctx.BeginFigure(new Point(0, sy0), true, true);
+                ctx.LineTo(new Point(bw, sy0), false, false);
+                ctx.LineTo(new Point(bw, sy1), false, false);
+                ctx.LineTo(new Point(0, sy1), false, false);
             }
-            segGeo.Freeze();
-            var drawing = new GeometryDrawing(_track, null, segGeo);
-            drawing.Freeze();
-            _segmentOverlays[ch] = drawing;
         }
+        segGeo.Freeze();
+        var segDrawing = new GeometryDrawing(_track, null, segGeo);
+        segDrawing.Freeze();
+
+        int fpixW = Math.Max(1, (int)Math.Ceiling(bw * dpi));
+        int fpixH = Math.Max(1, (int)Math.Ceiling(trackH * dpi));
+        var fillVis = new DrawingVisual();
+        using (var fdc = fillVis.RenderOpen())
+        {
+            fdc.DrawRectangle(_fill, null, new Rect(0, 0, bw, trackH));
+            fdc.DrawDrawing(segDrawing);
+        }
+        var fillBmp = new RenderTargetBitmap(fpixW, fpixH, 96 * dpi, 96 * dpi, PixelFormats.Pbgra32);
+        fillBmp.Render(fillVis);
+        fillBmp.Freeze();
+        _fillBmp = fillBmp;
+        _fillDestW = fpixW / dpi;
+        _fillDestH = fpixH / dpi;
+
+        _clipGeo ??= [new RectangleGeometry(), new RectangleGeometry()];
     }
 
     protected override void OnRender(DrawingContext dc)
@@ -406,7 +435,7 @@ public sealed class MeterBar : FrameworkElement
         EnsureBrushes();
         EnsureStaticCache(w, h);
 
-        dc.DrawDrawing(_staticBackdrop);
+        dc.DrawImage(_backdropBmp, new Rect(0, 0, _backdropDestW, _backdropDestH));
 
         double barW = _cachedBarW, yTop = _cachedYTop, trackH = _cachedTrackH;
         for (int i = 0; i < 2; i++)
@@ -423,11 +452,12 @@ public sealed class MeterBar : FrameworkElement
         double fillH = h * level;
         if (fillH < 0.5) return;
 
-        // 轴对齐矩形 Clip 走 Direct3D 硬件 Scissor 快路径(无圆角几何抗锯齿蒙版开销),
-        // 内部绘制全高冻结渐变 + 预烘焙横纹几何体
-        dc.PushClip(new RectangleGeometry(new Rect(bar.X, bar.Bottom - fillH, bar.Width, fillH)));
-        dc.DrawRectangle(_fill, null, bar);
-        dc.DrawDrawing(_segmentOverlays[ch]);
+        // 轴对齐矩形 Clip 走 Direct3D 硬件 Scissor 快路径(无圆角几何抗锯齿蒙版开销);
+        // 裁剪几何缓存复用(仅改 Rect,零分配),内部一次全高填充位图 blit
+        var geo = _clipGeo![ch];
+        geo.Rect = new Rect(bar.X, bar.Bottom - fillH, bar.Width, fillH);
+        dc.PushClip(geo);
+        dc.DrawImage(_fillBmp, new Rect(bar.X, bar.Y, _fillDestW, _fillDestH));
         dc.Pop();
     }
 
