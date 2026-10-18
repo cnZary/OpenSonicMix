@@ -316,7 +316,7 @@ public sealed class MeterBar : FrameworkElement
             (byte)Math.Min(255, (int)(c.G * f + 0.5)),
             (byte)Math.Min(255, (int)(c.B * f + 0.5)));
 
-    private static readonly double[] ScaleDbs = [0.0, -3, -12, -20, -40, -60];
+    private static readonly double[] ScaleDbs = [0.0, -3, -6, -12, -18, -24, -36, -48, -60];
     private static readonly string[] ScaleLabels = ScaleDbs.Select(db => $"{db:0}").ToArray();
     private const double Gap = 2;
 

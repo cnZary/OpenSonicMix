@@ -2,40 +2,43 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:c="clr-namespace:SonicCube.Panel.Controls"
-             MinWidth="130">
+             MinWidth="158">
   <Border Style="{StaticResource ChannelCard}">
     <Grid>
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto"/>   <!-- 通道标题 -->
-        <RowDefinition Height="Auto"/>   <!-- 内录/路由 -->
-        <RowDefinition Height="*"/>      <!-- 对齐的推子与电平 -->
-        <RowDefinition Height="Auto"/>   <!-- MUTE -->
+        <RowDefinition Height="*"/>      <!-- 推子 / 静音内录与电平 -->
         <RowDefinition Height="Auto"/>   <!-- 推子读数 -->
       </Grid.RowDefinitions>
 
-      <Border Grid.Row="0" Style="{StaticResource ChannelHeaderBadge}" MinHeight="32" Margin="0,0,0,8">
+      <Border Grid.Row="0" Style="{StaticResource ChannelHeaderBadge}" MinHeight="28" Margin="0,0,0,8">
         <TextBlock x:Name="Title" Style="{StaticResource TitleText}" TextWrapping="Wrap" VerticalAlignment="Center"/>
       </Border>
 
-      <ToggleButton x:Name="BtnLoopback" Grid.Row="1" Style="{StaticResource ChannelToggle}" Margin="0,0,0,8"/>
-
-      <Grid Grid.Row="2" MinHeight="120" Margin="0,0,0,12">
+      <Grid Grid.Row="1" MinHeight="192" Margin="0,0,0,12">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="*"/>
-          <ColumnDefinition Width="50"/>
+          <ColumnDefinition Width="52"/>
           <ColumnDefinition Width="8"/>
-          <ColumnDefinition Width="46"/>
+          <ColumnDefinition Width="72"/>
           <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
-        <c:VolumeFaderControl x:Name="Fader" Grid.Column="1" Width="50"/>
-        <Border Grid.Column="3" Style="{StaticResource InsetWellBorder}" Padding="4">
-          <c:MeterBar x:Name="Meter" Width="36" HorizontalAlignment="Center"/>
-        </Border>
+        <c:VolumeFaderControl x:Name="Fader" Grid.Column="1" Width="52"/>
+        <Grid Grid.Column="3">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+          </Grid.RowDefinitions>
+          <ToggleButton x:Name="BtnMute" Grid.Row="0" Style="{StaticResource MuteToggle}" Margin="0,0,0,8"/>
+          <ToggleButton x:Name="BtnLoopback" Grid.Row="1" Style="{StaticResource ChannelToggle}" Margin="0,0,0,8"/>
+          <Border Grid.Row="2" Style="{StaticResource InsetWellBorder}" Padding="4" Width="46" HorizontalAlignment="Center">
+            <c:MeterBar x:Name="Meter" Width="38" HorizontalAlignment="Center"/>
+          </Border>
+        </Grid>
       </Grid>
 
-      <ToggleButton x:Name="BtnMute" Grid.Row="3" Style="{StaticResource MuteToggle}" Margin="0,0,0,8"/>
-
-      <Border Grid.Row="4" Style="{StaticResource ReadoutPill}" MinHeight="28">
+      <Border Grid.Row="2" Style="{StaticResource ReadoutPill}" MinHeight="28">
         <TextBlock x:Name="FaderValue" Style="{StaticResource ValueText}" VerticalAlignment="Center"/>
       </Border>
     </Grid>
