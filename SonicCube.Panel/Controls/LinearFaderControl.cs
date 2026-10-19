@@ -61,7 +61,7 @@ public sealed class LinearFaderControl : FrameworkElement
 
     public void SetValueSilently(double v)
     {
-        if (_dragging || DateTime.UtcNow < _suppressEchoUntil) return;
+        if (_dragging || (!StateSynchronization.IsLocal(this) && DateTime.UtcNow < _suppressEchoUntil)) return;
         SetCurrentValue(ValueProperty, Math.Clamp(v, Minimum, Maximum));
     }
 

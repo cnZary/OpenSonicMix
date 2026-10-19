@@ -92,7 +92,7 @@ public sealed class KnobControl : FrameworkElement
     public void SetValueSilently(double v)
     {
         // 拖动中或刚提交后短暂窗口内不回显,避免快照覆盖用户输入/造成回跳
-        if (_dragging || DateTime.UtcNow < _suppressEchoUntil) return;
+        if (_dragging || (!StateSynchronization.IsLocal(this) && DateTime.UtcNow < _suppressEchoUntil)) return;
         SetCurrentValue(ValueProperty, Math.Clamp(v, Minimum, Maximum));
     }
 

@@ -4,6 +4,7 @@ using SonicCube.Panel.Localization;
 using SonicCube.Protocol.Commands;
 using SonicCube.Protocol.Models;
 using SonicCube.Shared.Ipc;
+using SonicCube.Panel.Simulation;
 
 namespace SonicCube.Panel.Views;
 
@@ -16,6 +17,7 @@ public partial class MainWindow : Window
 {
     private readonly TrayClient? _client;
     private readonly bool _simulate;
+    private readonly SimulatedDevice? _simulator;
     private SettingsDto _settings = new();
     private DeviceStateDto _state = new();
     private PresetState _preset = new();
@@ -33,6 +35,8 @@ public partial class MainWindow : Window
     {
         _client = client;
         _simulate = simulate;
+        _simulator = simulate ? new SimulatedDevice() : null;
+        SetValue(Controls.StateSynchronization.IsLocalProperty, simulate);
         InitializeComponent();
         Mic1 = new InputChannelView(0);
         Line2 = new InputChannelView(1);
@@ -77,41 +81,50 @@ public partial class MainWindow : Window
         BottomBar.MenuRequested += OpenSettings;
     }
 
-    // ── 模拟器(仅视觉原型,不发真实设备写入)─────────────────
+    // ── 模拟器(本地交互与电平预览)─────────────────────────
 
-    private System.Threading.Timer? _simTimer;
+    private System.Windows.Threading.DispatcherTimer? _simTimer;
+    private System.Diagnostics.Stopwatch? _simClock;
 
     private void StartSimulator()
     {
         BottomBar.SetStatus(Loc.Get("Simulated"));
         _synced = true;
         _state.Connected = true;
-        _global = new GlobalState { Efx = 1, Monitor = 1 };
-        _preset.MonoSw = 0;
-        _preset.DspRecSw = 1;
-        _preset.FxModuleEn = 0b011111;
-        _preset.VolPot[0] = -8; _preset.VolPot[1] = -12; _preset.VolPot[2] = -5; _preset.VolPot[3] = -5;
-        _preset.Send[0] = 0.25f; _preset.Send[1] = 0.1f;
-        _preset.Phase[0] = -50; _preset.Phase[1] = 50;
-        _preset.FxAlg[0] = 1; _preset.FxAlg[2] = 0x07000027; _preset.FxAlg[3] = 0x01000035; _preset.FxAlg[4] = 0x0C000000;
-        foreach (var mod in FxCatalog.Modules)
-            foreach (var alg in mod.Algorithms)
-                foreach (var param in alg.Params)
-                    _preset.FxParaVal[mod.ModuleId * PresetState.ParamsPerModule + param.AlgId] = param.Default;
-        ApplySnapshotToUi();
+        ApplySimulatedState();
         UpdateUiEnabled();
-        // 模拟电平推送
-        var rnd = new Random();
-        _simTimer = new System.Threading.Timer(_ =>
+        _simClock = System.Diagnostics.Stopwatch.StartNew();
+        _simTimer = new System.Windows.Threading.DispatcherTimer(
+            System.Windows.Threading.DispatcherPriority.Background, Dispatcher)
         {
-            var m = new float[10];
-            for (int i = 0; i < 10; i++)
-            {
-                double baseDb = i < 8 ? -18 + rnd.NextDouble() * 14 : -12 + rnd.NextDouble() * 10;
-                m[i] = (float)baseDb;
-            }
-            Dispatcher.InvokeAsync(() => ApplyMeters(m));
-        }, null, 60, 60);
+            Interval = TimeSpan.FromMilliseconds(60),
+        };
+        _simTimer.Tick += OnSimulatorTick;
+        IsVisibleChanged += (_, _) => UpdateSimulatorTimer();
+        StateChanged += (_, _) => UpdateSimulatorTimer();
+        UpdateSimulatorTimer();
+    }
+
+    private void ApplySimulatedState()
+    {
+        _preset = _simulator!.Preset;
+        _global = _simulator.Global;
+        ApplySnapshotToUi();
+        BottomBar.SetStatus(Loc.Get("Simulated"));
+    }
+
+    private void OnSimulatorTick(object? sender, EventArgs e) =>
+        ApplyMeters(_simulator!.GetMeters(_simClock!.Elapsed));
+
+    private void UpdateSimulatorTimer()
+    {
+        if (_simTimer == null) return;
+        if (!_closing && IsVisible && WindowState != WindowState.Minimized)
+        {
+            OnSimulatorTick(this, EventArgs.Empty);
+            _simTimer.Start();
+        }
+        else _simTimer.Stop();
     }
 
     // ── IPC 绑定与状态同步 ──────────────────────────────────
@@ -296,10 +309,49 @@ public partial class MainWindow : Window
 
     // ── 发送(经 Tray)────────────────────────────────────────
 
-    private void SendInt(uint address, int value) => _ = SendSafe(() => _client!.SetIntAsync(address, value));
-    private void SendFloat(uint address, float value) => _ = SendSafe(() => _client!.SetFloatAsync(address, value));
-    private void SendFxParam(int module, int algId, float value) => _ = SendSafe(() => _client!.SetFxParamAsync(module, algId, value));
-    private void Toggle(string sw) => _ = SendSafe(() => _client!.ToggleAsync(sw));
+    private void SendInt(uint address, int value)
+    {
+        if (_simulator != null)
+        {
+            _simulator.SetInt(address, value);
+            ApplySimulatedState();
+            return;
+        }
+        _ = SendSafe(() => _client!.SetIntAsync(address, value));
+    }
+
+    private void SendFloat(uint address, float value)
+    {
+        if (_simulator != null)
+        {
+            _simulator.SetFloat(address, value);
+            ApplySimulatedState();
+            return;
+        }
+        _ = SendSafe(() => _client!.SetFloatAsync(address, value));
+    }
+
+    private void SendFxParam(int module, int algId, float value)
+    {
+        if (_simulator != null)
+        {
+            _simulator.SetFxParameter(module, algId, value);
+            ApplySimulatedState();
+            return;
+        }
+        _ = SendSafe(() => _client!.SetFxParamAsync(module, algId, value));
+    }
+
+    private void Toggle(string sw)
+    {
+        if (_simulator != null)
+        {
+            _simulator.Toggle(sw);
+            ApplySimulatedState();
+            return;
+        }
+        _ = SendSafe(() => _client!.ToggleAsync(sw));
+    }
 
     private async Task SendSafe(Func<Task<IpcMessage?>> op)
     {
@@ -317,7 +369,12 @@ public partial class MainWindow : Window
 
     private void OnFullResetRequested()
     {
-        if (_simulate) return;
+        if (_simulator != null)
+        {
+            _simulator.ResetAll();
+            ApplySimulatedState();
+            return;
+        }
         var r = MessageBox.Show(this, Loc.Get("ResetConfirm"), Loc.Get("ResetAll"),
             MessageBoxButton.OKCancel, MessageBoxImage.Warning);
         if (r != MessageBoxResult.OK) return;
@@ -326,9 +383,20 @@ public partial class MainWindow : Window
 
     private void OnResetRequested(int uiIndex)
     {
-        if (_simulate) return;
         // uiIndex → (module, 本地化名称键):0=COMP 1=MIC1 EQ 3=INST 4=CH2 EQ;2/5=HPF
         int module = uiIndex switch { 0 => 0, 1 => 1, 3 => 2, 4 => 3, _ => -1 };
+        if (_simulator != null)
+        {
+            if (module >= 0) _simulator.ResetModule(module);
+            else
+            {
+                int channel = uiIndex == 2 ? 0 : 1;
+                _simulator.SetInt(CommandAddress.WithLocation(CommandAddress.HpfSwitch, channel), 0);
+                _simulator.SetInt(CommandAddress.WithLocation(CommandAddress.LowCut, channel), 0);
+            }
+            ApplySimulatedState();
+            return;
+        }
         string nameKey = uiIndex switch { 0 => "Comp", 1 => "Eq", 3 => "Inst", 4 => "Eq", _ => "Hpf" };
         var r = MessageBox.Show(this, Loc.Format("ResetModuleConfirm", Loc.Get(nameKey)), Loc.Get("Reset"),
             MessageBoxButton.OKCancel, MessageBoxImage.Warning);
@@ -350,16 +418,11 @@ public partial class MainWindow : Window
 
     private void OpenSettings()
     {
-        if (_simulate)
-        {
-            MessageBox.Show(this, Loc.Get("Simulated"), "Settings", MessageBoxButton.OK);
-            return;
-        }
-        var w = new SettingsWindow(_client!, _settings) { Owner = this };
+        var w = new SettingsWindow(_client, _settings) { Owner = this };
         w.SettingsSaved += s =>
         {
-            _settings = s;
-            Topmost = s.AlwaysOnTop ?? false;
+            ApplySettings(s);
+            if (_simulate) BottomBar.SetStatus(Loc.Get("Simulated"));
         };
         w.ShowDialog();
     }
@@ -373,7 +436,8 @@ public partial class MainWindow : Window
     {
         _closing = true; // 自己释放连接也会触发 TrayDisconnected,防止重入
         base.OnClosed(e);
-        _simTimer?.Dispose();
+        _simTimer?.Stop();
+        if (_simTimer != null) _simTimer.Tick -= OnSimulatorTick;
         // 关闭即退出进程;取消订阅并释放 IPC(Tray 据此释放连接保留条件)。
         if (_client != null)
         {

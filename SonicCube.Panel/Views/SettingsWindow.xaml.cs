@@ -8,21 +8,24 @@ namespace SonicCube.Panel.Views;
 /// <summary>
 /// 设置窗口。工作模式切换立即通知 Tray;低占用模式下重连复选框置灰但保留配置值;
 /// 48V 自动开启需安全授权(持久化);语言切换无需重启。
+/// client 为空时仅在内存中预览设置,通过 SettingsSaved 回传。
 /// </summary>
 public partial class SettingsWindow : Window
 {
-    private readonly TrayClient _client;
+    private readonly TrayClient? _client;
     private SettingsDto _settings;
     private bool _loading;
     private bool _phantomConsentGrantedThisSession;
 
     public event Action<SettingsDto>? SettingsSaved;
 
-    public SettingsWindow(TrayClient client, SettingsDto current)
+    public SettingsWindow(TrayClient? client, SettingsDto current)
     {
         _client = client;
         _settings = current;
         InitializeComponent();
+        OpenLog.IsEnabled = _client is not null;
+        System.Windows.Controls.ToolTipService.SetShowOnDisabled(OpenLog, _client is null);
         Lang.Items.Add(Loc.Get("LanguageAuto"));
         Lang.Items.Add("English");
         Lang.Items.Add("简体中文");
@@ -81,14 +84,15 @@ public partial class SettingsWindow : Window
     {
         if (_loading) return;
         UpdateReapplyEnabled(IsFast);
-        await _client.SetWorkModeAsync(IsFast ? "fastConnection" : "lowResource");
+        if (_client is not null)
+            await _client.SetWorkModeAsync(IsFast ? "fastConnection" : "lowResource");
         await SaveAsync();
     }
 
     private async Task OnEnable48VChangedAsync()
     {
         if (_loading) return;
-        if (Enable48V.IsChecked == true && !(_settings.PhantomPowerConsent ?? false) && !_phantomConsentGrantedThisSession)
+        if (_client is not null && Enable48V.IsChecked == true && !(_settings.PhantomPowerConsent ?? false) && !_phantomConsentGrantedThisSession)
         {
             if (!ShowPhantomConsent())
             {
@@ -160,10 +164,16 @@ public partial class SettingsWindow : Window
             EnableEFX = EnableEFX.IsChecked,
             ReapplyOnReconnect = Reapply.IsChecked,
             AlwaysOnTop = AlwaysOnTop.IsChecked,
-            PhantomPowerConsent = Enable48V.IsChecked != true
+            PhantomPowerConsent = _client is null || Enable48V.IsChecked != true
                 ? false
                 : (_phantomConsentGrantedThisSession || (_settings.PhantomPowerConsent ?? false)),
         };
+        if (_client is null)
+        {
+            _settings = dto;
+            SettingsSaved?.Invoke(dto);
+            return;
+        }
         var resp = await _client.UpdateSettingsAsync(dto);
         if (resp?.Success == true)
         {
@@ -174,6 +184,7 @@ public partial class SettingsWindow : Window
 
     private void OpenLogDir()
     {
+        if (_client is null) return;
         try
         {
             var dir = System.IO.Path.Combine(
@@ -204,6 +215,7 @@ public partial class SettingsWindow : Window
         ReapplyHint.Text = Loc.Get("OnlyFastMode");
         AlwaysOnTop.Content = Loc.Get("AlwaysOnTop");
         OpenLog.Content = Loc.Get("Open");
+        OpenLog.ToolTip = _client is null ? Loc.Get("Simulated") : null;
         if (Lang.Items.Count > 0) Lang.Items[0] = Loc.Get("LanguageAuto");
     }
 }

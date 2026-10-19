@@ -58,7 +58,8 @@ public sealed class VolumeFaderControl : FrameworkElement
     {
         // 拖动中不回显。提交后若回显值仍明显偏离最后提交值,说明是旧快照,忽略。
         if (_dragging) return;
-        if (!double.IsNaN(_awaitingConfirmDb))
+        if (StateSynchronization.IsLocal(this)) _awaitingConfirmDb = double.NaN;
+        else if (!double.IsNaN(_awaitingConfirmDb))
         {
             if (Math.Abs(db - _awaitingConfirmDb) < 0.05) _awaitingConfirmDb = double.NaN; // 回包确认,恢复
             else return; // 旧快照,忽略

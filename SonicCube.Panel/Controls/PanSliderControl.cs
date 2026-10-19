@@ -47,7 +47,7 @@ public sealed class PanSliderControl : FrameworkElement
     public void SetValueSilently(double v)
     {
         // 拖动中或刚提交后短暂窗口内不回显,避免快照回跳
-        if (_dragging || DateTime.UtcNow < _suppressEchoUntil) return;
+        if (_dragging || (!StateSynchronization.IsLocal(this) && DateTime.UtcNow < _suppressEchoUntil)) return;
         SetCurrentValue(ValueProperty, Math.Clamp(v, -50, 50));
     }
 

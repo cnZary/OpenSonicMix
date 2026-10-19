@@ -87,6 +87,13 @@ dotnet publish SonicCube.Tray/SonicCube.Tray.csproj -c Release -r win-x64
 dotnet publish SonicCube.Panel/SonicCube.Panel.csproj -c Release -r win-x64
 ```
 
+### 交互模拟模式
+
+运行 `publish\SonicCube.Panel.exe --simulate` 可预览本地模拟设备；模拟与正式模式各自保持单实例，可以同时打开。
+HPF、效果开关、算法参数、推子、静音/独听和重置均会更新模拟状态；设置只在本次预览中保留。
+10 路电平使用不同的变化节奏，每 8 秒错峰短暂达到 0 dB，便于观察顶部红色填充和峰值警告。
+模拟模式不连接 MIDI 设备，窗口最小化或隐藏时暂停电平推送。
+
 ### 真实设备验证(DeviceConsole)
 
 ```powershell

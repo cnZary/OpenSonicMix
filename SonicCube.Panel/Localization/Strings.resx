@@ -82,6 +82,8 @@
   <data name="Syncing" xml:space="preserve"><value>Syncing device state…</value></data>
   <data name="Menu" xml:space="preserve"><value>Menu</value></data>
   <data name="Simulated" xml:space="preserve"><value>Simulated (no device)</value></data>
+  <data name="PanelActivationFailed" xml:space="preserve"><value>A panel is already running, but its window could not be found. End SonicCube.Panel in Task Manager and try again.</value></data>
+  <data name="PanelStartupFailed" xml:space="preserve"><value>The panel could not start: {0}</value></data>
   <data name="Cancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="Error" xml:space="preserve"><value>Error</value></data>
   <data name="Err_open_failed" xml:space="preserve"><value>Cannot open MIDI device. The port may be in use by another program (e.g. Sonic Mix).</value></data>
