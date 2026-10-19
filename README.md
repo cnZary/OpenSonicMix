@@ -9,7 +9,7 @@ Sonicake **Sonic Cube II** 声卡的 Windows 控制软件，用于替代官方 S
 - 双进程架构:**Tray** 常驻托盘独占 MIDI 设备，**Panel** 按需启动的完整控制面板。
 - 两种 MIDI 工作模式(低占用 / 快速连接)，托盘菜单动态切换。
 - 完整控制面板：输入通道、回放通道、效果区、总线、电平表、设置页。
-- 真实设备协议验证控制台(DeviceConsole)与 25 个协议单元测试。
+- 真实设备协议验证控制台(DeviceConsole)，以及协议、IPC 与 WPF 电平动画回归测试。
 - 中英文双语本地化(`zh-CN` / `en-US`)。
 
 ## 架构
@@ -36,7 +36,8 @@ Sonic Cube II 设备
 | `SonicCube.Shared/` | NativeAOT 兼容的 WinMM MIDI 封装(`Midi/WinMM.cs`、`MidiDevice.cs`)、高层会话(`Midi/DeviceSession.cs`，含握手重试、float 参数读回验证)、IPC 消息模型与管道封装(`Ipc/`)。 |
 | `SonicCube.Tray/` | NativeAOT 原生托盘进程:Win32 托盘、单实例 Mutex、异步命令协调器 `DeviceCoordinator`、双工作模式 `WorkModeManager`、启动/重连自动动作、Named Pipe IPC 服务端、滚动日志(`Logging/Logger.cs`)、Windows 自启(`Startup/StartupManager.cs`)。 |
 | `SonicCube.Panel/` | WPF 完整控制面板(官方内置 Fluent 主题):输入通道 MIC1 / LINE-INST2，回放 USB / OTG，效果区 COMP / GlobalEQ / INST / EQ / HPF / RVB，总线，电平表，设置页。 |
-| `SonicCube.Protocol.Tests/` | 25 个协议单元测试(MSTest)。 |
+| `SonicCube.Protocol.Tests/` | 协议与 IPC 单元测试(MSTest)。 |
+| `SonicCube.Panel.Tests/` | WPF 电平表动画回归测试，覆盖极短帧间隔、平滑速度与峰值保持。 |
 | `SonicCube.DeviceConsole/` | 真实设备协议验证控制台(子命令 `enum` / `status` / `efx` / `p48` / `raw`)。 |
 
 托盘菜单提供六个快速开关:**48V / EFX / MONITOR / ONAIR / 总静音 / MONO**。
@@ -76,8 +77,8 @@ Tray 支持两种工作模式，可在托盘菜单中动态切换:
 # 全部构建 (build all)
 dotnet build SonicCubePanel.slnx
 
-# 协议单元测试 (25 tests)
-dotnet test SonicCube.Protocol.Tests/SonicCube.Protocol.Tests.csproj
+# 协议、IPC 与 WPF 电平动画回归测试
+dotnet test SonicCubePanel.slnx
 
 # Tray NativeAOT 发布 (native exe, no runtime dependency)
 dotnet publish SonicCube.Tray/SonicCube.Tray.csproj -c Release -r win-x64

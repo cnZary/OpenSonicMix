@@ -2,7 +2,7 @@
 #
 # 默认编译为框架依赖(framework-dependent)版本, 体积小, 目标机器需装 .NET 10 运行时:
 #   1. 还原 + 构建整个解决方案 (Release)
-#   2. 运行 SonicCube.Protocol.Tests 单元测试
+#   2. 运行协议、IPC 与 WPF 电平动画回归测试
 #   3. 发布 SonicCube.Tray   (框架依赖单文件, win-x64)
 #   4. 发布 SonicCube.Panel  (框架依赖单文件, win-x64)
 #   5. 构建 zh-CN 卫星程序集
@@ -73,7 +73,6 @@ $PublishDir = Join-Path $RepoRoot 'publish'
 $Solution = Join-Path $RepoRoot 'SonicCubePanel.slnx'
 $TrayProj = Join-Path $RepoRoot 'SonicCube.Tray\SonicCube.Tray.csproj'
 $PanelProj = Join-Path $RepoRoot 'SonicCube.Panel\SonicCube.Panel.csproj'
-$TestProj = Join-Path $RepoRoot 'SonicCube.Protocol.Tests\SonicCube.Protocol.Tests.csproj'
 $Rid = 'win-x64'
 $StartTime = Get-Date
 
@@ -85,8 +84,8 @@ Write-Step "还原并构建解决方案 ($Configuration)"
 Invoke-Dotnet @('build', $Solution, '-c', $Configuration) '解决方案构建'
 
 if (-not $SkipTests) {
-    Write-Step "运行单元测试 (SonicCube.Protocol.Tests)"
-    Invoke-Dotnet @('test', $TestProj, '-c', $Configuration, '--no-build') '单元测试'
+    Write-Step "运行单元测试 (Protocol + Panel)"
+    Invoke-Dotnet @('test', $Solution, '-c', $Configuration, '--no-build') '单元测试'
 } else {
     Write-Host "`n==> 跳过单元测试 (-SkipTests)" -ForegroundColor Yellow
 }

@@ -1,6 +1,7 @@
 <Solution>
   <Project Path="SonicCube.DeviceConsole/SonicCube.DeviceConsole.csproj" />
   <Project Path="SonicCube.Panel/SonicCube.Panel.csproj" />
+  <Project Path="SonicCube.Panel.Tests/SonicCube.Panel.Tests.csproj" />
   <Project Path="SonicCube.Protocol.Tests/SonicCube.Protocol.Tests.csproj" />
   <Project Path="SonicCube.Protocol/SonicCube.Protocol.csproj" />
   <Project Path="SonicCube.Shared/SonicCube.Shared.csproj" />

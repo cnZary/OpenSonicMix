@@ -23,7 +23,6 @@ public sealed class MeterBar : FrameworkElement
     private static volatile bool _subscribed;
     private static int _wakePending;
     private static int _inputVersion;
-    private static DateTime _lastFrame = DateTime.MinValue;
     private static TimeSpan? _lastRenderingTime;
     private Window? _hostWindow;
     private volatile bool _registered;
@@ -151,7 +150,6 @@ public sealed class MeterBar : FrameworkElement
         lock (Active)
         {
             if (_subscribed || Active.Count == 0) return;
-            _lastFrame = DateTime.MinValue;
             _lastRenderingTime = null;
             CompositionTarget.Rendering += OnRendering;
             _subscribed = true;
@@ -183,7 +181,6 @@ public sealed class MeterBar : FrameworkElement
             if (!found) Active.Add(new WeakReference<MeterBar>(this));
             if (!_subscribed && NeedsStep(DateTime.UtcNow))
             {
-                _lastFrame = DateTime.MinValue;
                 _lastRenderingTime = null;
                 CompositionTarget.Rendering += OnRendering;
                 _subscribed = true;
@@ -205,23 +202,21 @@ public sealed class MeterBar : FrameworkElement
             {
                 CompositionTarget.Rendering -= OnRendering;
                 _subscribed = false;
-                _lastFrame = DateTime.MinValue;
+                _lastRenderingTime = null;
             }
         }
     }
 
     private static void OnRendering(object? sender, EventArgs e)
     {
-        // WPF 布局变化可能在同一合成帧内再次发出 Rendering。
-        if (e is RenderingEventArgs frame)
-        {
-            if (_lastRenderingTime == frame.RenderingTime) return;
-            _lastRenderingTime = frame.RenderingTime;
-        }
+        if (e is not RenderingEventArgs frame) return;
+        // 使用合成帧时间:回调可能紧挨着执行,墙钟间隔不代表实际动画帧间隔。
+        var previousTime = _lastRenderingTime;
+        if (previousTime.HasValue && frame.RenderingTime <= previousTime.Value) return;
+        _lastRenderingTime = frame.RenderingTime;
         int inputVersion = Volatile.Read(ref _inputVersion);
         var now = DateTime.UtcNow;
-        double dt = _lastFrame == DateTime.MinValue ? 0.016 : (now - _lastFrame).TotalSeconds;
-        _lastFrame = now;
+        double dt = previousTime.HasValue ? (frame.RenderingTime - previousTime.Value).TotalSeconds : 0.016;
         dt = Math.Clamp(dt, 0, 0.1);
 
         lock (Active)
@@ -238,7 +233,7 @@ public sealed class MeterBar : FrameworkElement
             {
                 CompositionTarget.Rendering -= OnRendering;
                 _subscribed = false;
-                _lastFrame = DateTime.MinValue;
+                _lastRenderingTime = null;
                 // 提交电平与解除订阅交错时也不能丢掉最后一次唤醒。
                 if (inputVersion != Volatile.Read(ref _inputVersion)) EnsureSubscribedOnUi();
             }
@@ -277,13 +272,14 @@ public sealed class MeterBar : FrameworkElement
         double stepUp = AttackDbPerSec * dt / 60.0;
         double stepDown = ReleaseDbPerSec * dt / 60.0;
         double next = target > cur ? Math.Min(target, cur + stepUp) : Math.Max(target, cur - stepDown);
-        if (Math.Abs(next - cur) > 1e-4) { _display[ch] = next; changed = true; }
-        else if (cur != target) { _display[ch] = target; if (cur > 0) changed = true; }
+        // 很短的帧间隔只应移动很小的距离,不能据此认定已收敛并吸附到目标。
+        // Min/Max 会在剩余距离小于步长时自然精确到达目标;dt=0 则保持原值。
+        if (next != cur) { _display[ch] = next; changed = true; }
 
         // 峰值保持
         if (target >= _peak[ch] && target > 1e-4)
         {
-            if (Math.Abs(target - _peak[ch]) > 1e-4) changed = true;
+            if (target != _peak[ch]) changed = true;
             _peak[ch] = target;
             _peakHoldUntil[ch] = now + PeakHold;
         }
@@ -293,7 +289,7 @@ public sealed class MeterBar : FrameworkElement
             double npDb = Math.Max(-60, pkDb - PeakReleaseDbPerSec * dt);
             double np = (npDb + 60) / 60;
             if (np <= 1e-4) np = 0;
-            if (Math.Abs(np - _peak[ch]) > 1e-4 || (np == 0 && _peak[ch] > 0)) { _peak[ch] = np; changed = true; }
+            if (np != _peak[ch]) { _peak[ch] = np; changed = true; }
         }
         return changed;
     }
