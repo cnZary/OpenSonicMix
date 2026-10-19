@@ -13,6 +13,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SonicCube.Protocol\SonicCube.Protocol.csproj" />
+    <ProjectReference Include="..\SonicCube.Shared\SonicCube.Shared.csproj" />
   </ItemGroup>
 
   <ItemGroup>

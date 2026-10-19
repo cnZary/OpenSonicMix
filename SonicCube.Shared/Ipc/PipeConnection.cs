@@ -1,5 +1,4 @@
 using System.IO.Pipes;
-using System.Text;
 using System.Text.Json;
 
 namespace SonicCube.Shared.Ipc;
@@ -38,18 +37,23 @@ public static class IpcFraming
             }
             return false;
         }
-        var line = Encoding.UTF8.GetString(buffer, 0, nl).TrimEnd('\r');
-        // 移除已消费行
-        Buffer.BlockCopy(buffer, nl + 1, buffer, 0, length - nl - 1);
-        length -= nl + 1;
-        if (line.Length == 0) return false;
+        int lineLength = nl;
+        while (lineLength > 0 && buffer[lineLength - 1] == '\r') lineLength--;
         try
         {
-            msg = JsonSerializer.Deserialize(line, IpcJsonContext.Default.IpcMessage);
+            // 直接读取 UTF-8,避免高频电平消息先分配 UTF-16 字符串再转码。
+            if (lineLength > 0)
+                msg = JsonSerializer.Deserialize(buffer.AsSpan(0, lineLength), IpcJsonContext.Default.IpcMessage);
         }
         catch (JsonException ex)
         {
             error = $"JSON 解析失败: {ex.Message}";
+        }
+        finally
+        {
+            // 解析仍引用原缓冲,必须在解析完成后才移动下一行。
+            Buffer.BlockCopy(buffer, nl + 1, buffer, 0, length - nl - 1);
+            length -= nl + 1;
         }
         return msg != null;
     }

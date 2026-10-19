@@ -13,7 +13,7 @@ namespace SonicCube.Panel.Controls;
 /// 快攻慢放 + 峰值保持:按实际经过时间计算,不按帧数。
 /// 所有实例统一由静态 CompositionTarget.Rendering 驱动(单一订阅,窗口关闭或电平静止时解除,来信号零延迟唤醒)。
 /// 最小化/不可见时暂停绘制;静态背景(槽、刻度线、dB 数字)与满高渐变+横纹填充按尺寸/DPI 预烘焙为位图,
-/// 逐帧仅剩位图 blit + 峰值线,文本/几何/渐变不再逐帧光栅化,也不再有每帧分配。
+/// 条体与峰值使用保留的子 Visual,逐帧仅更新裁剪和位移,不重建整表绘制指令。
 /// 视觉:分段渐变电平条(绿→黄→红,分界处颜色连续)、右侧 dB 刻度尺(数字 + 刻度线)、双段式峰值保持线。
 /// </summary>
 public sealed class MeterBar : FrameworkElement
@@ -22,9 +22,17 @@ public sealed class MeterBar : FrameworkElement
     private static readonly List<WeakReference<MeterBar>> Active = new();
     private static volatile bool _subscribed;
     private static int _wakePending;
+    private static int _inputVersion;
     private static DateTime _lastFrame = DateTime.MinValue;
+    private static TimeSpan? _lastRenderingTime;
     private Window? _hostWindow;
-    private bool _windowMinimized;
+    private volatile bool _registered;
+    private volatile bool _windowMinimized;
+    private readonly object _levelSync = new();
+    private readonly DrawingVisual[] _levelVisuals = [new(), new()];
+    private readonly DrawingVisual[] _peakVisuals = [new(), new()];
+    private readonly RectangleGeometry[] _clipGeo = [new(), new()];
+    private readonly bool[] _peakWarning = new bool[2];
 
     public MeterBar()
     {
@@ -34,7 +42,14 @@ public sealed class MeterBar : FrameworkElement
         _display = new double[2];
         _peak = new double[2];
         _peakHoldUntil = new DateTime[2];
+        for (int i = 0; i < 2; i++)
+        {
+            _levelVisuals[i].Clip = _clipGeo[i];
+            AddVisualChild(_levelVisuals[i]);
+            AddVisualChild(_peakVisuals[i]);
+        }
         IsVisibleChanged += (_, _) => UpdateSubscription();
+        SizeChanged += (_, _) => UpdateSubscription();
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
     }
@@ -52,7 +67,7 @@ public sealed class MeterBar : FrameworkElement
                 _windowMinimized = _hostWindow.WindowState == WindowState.Minimized;
             }
         }
-        Register();
+        UpdateSubscription();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -74,8 +89,8 @@ public sealed class MeterBar : FrameworkElement
     }
 
     /// <summary>目标电平(dB,-100=无信号)。线程安全:仅保留最新。</summary>
-    private volatile float _targetL = -100f;
-    private volatile float _targetR = -100f;
+    private float _targetL = -100f;
+    private float _targetR = -100f;
 
     private readonly double[] _display;       // 渲染用平滑值(0..1)
     private readonly double[] _peak;          // 峰值保持(0..1)
@@ -90,18 +105,26 @@ public sealed class MeterBar : FrameworkElement
     /// <summary>提交最新电平(dB)。任何线程可调用,只保留最新值;若当前渲染已休眠且有新信号则零延迟唤醒。</summary>
     public void SetLevelDb(float leftDb, float rightDb)
     {
-        _targetL = leftDb;
-        _targetR = rightDb;
-        if (!_subscribed && !_windowMinimized)
+        bool needsStep;
+        var now = DateTime.UtcNow;
+        lock (_levelSync)
         {
+            double previousL = DbToNorm(_targetL);
+            double previousR = DbToNorm(_targetR);
             double tl = DbToNorm(leftDb);
             double tr = DbToNorm(rightDb);
-            if (Math.Abs(tl - _display[0]) > 1e-4 || Math.Abs(tr - _display[1]) > 1e-4
-                || tl > _peak[0] + 1e-4 || tr > _peak[1] + 1e-4)
-            {
-                RequestWake();
-            }
+            // 上个目标一直保持到本次输入;从稳定峰值下降时也保留完整保持段,
+            // 即使两次输入相隔很久、期间渲染已休眠。
+            if ((tl >= _peak[0] && tl > 1e-4) || (previousL >= _peak[0] && previousL > 1e-4))
+                _peakHoldUntil[0] = now + PeakHold;
+            if ((tr >= _peak[1] && tr > 1e-4) || (previousR >= _peak[1] && previousR > 1e-4))
+                _peakHoldUntil[1] = now + PeakHold;
+            _targetL = leftDb;
+            _targetR = rightDb;
+            needsStep = NeedsStepCore();
         }
+        Interlocked.Increment(ref _inputVersion);
+        if (needsStep && !_subscribed && _registered) RequestWake();
     }
 
     private void RequestWake()
@@ -129,6 +152,7 @@ public sealed class MeterBar : FrameworkElement
         {
             if (_subscribed || Active.Count == 0) return;
             _lastFrame = DateTime.MinValue;
+            _lastRenderingTime = null;
             CompositionTarget.Rendering += OnRendering;
             _subscribed = true;
         }
@@ -143,7 +167,7 @@ public sealed class MeterBar : FrameworkElement
 
     private void UpdateSubscription()
     {
-        bool visible = IsVisible && !_windowMinimized && ActualHeight > 0;
+        bool visible = IsLoaded && IsVisible && !_windowMinimized && ActualWidth > 0 && ActualHeight > 0;
         if (visible) Register(); else Unregister();
     }
 
@@ -152,6 +176,7 @@ public sealed class MeterBar : FrameworkElement
         if (_windowMinimized) return;
         lock (Active)
         {
+            _registered = true;
             bool found = false;
             foreach (var wr in Active)
                 if (wr.TryGetTarget(out var m) && ReferenceEquals(m, this)) { found = true; break; }
@@ -159,6 +184,7 @@ public sealed class MeterBar : FrameworkElement
             if (!_subscribed && NeedsStep(DateTime.UtcNow))
             {
                 _lastFrame = DateTime.MinValue;
+                _lastRenderingTime = null;
                 CompositionTarget.Rendering += OnRendering;
                 _subscribed = true;
             }
@@ -169,6 +195,7 @@ public sealed class MeterBar : FrameworkElement
     {
         lock (Active)
         {
+            _registered = false;
             for (int i = Active.Count - 1; i >= 0; i--)
             {
                 if (!Active[i].TryGetTarget(out var m) || ReferenceEquals(m, this))
@@ -185,6 +212,13 @@ public sealed class MeterBar : FrameworkElement
 
     private static void OnRendering(object? sender, EventArgs e)
     {
+        // WPF 布局变化可能在同一合成帧内再次发出 Rendering。
+        if (e is RenderingEventArgs frame)
+        {
+            if (_lastRenderingTime == frame.RenderingTime) return;
+            _lastRenderingTime = frame.RenderingTime;
+        }
+        int inputVersion = Volatile.Read(ref _inputVersion);
         var now = DateTime.UtcNow;
         double dt = _lastFrame == DateTime.MinValue ? 0.016 : (now - _lastFrame).TotalSeconds;
         _lastFrame = now;
@@ -199,35 +233,41 @@ public sealed class MeterBar : FrameworkElement
                 if (!m.IsVisible || m._windowMinimized || m.ActualHeight <= 0) continue;
                 if (m.Step(now, dt)) anyActive = true;
             }
-            // 所有通道均已回落静止时自动解除订阅,静音/空闲时 0% CPU/GPU 占用
+            // 稳定电平与静音均休眠;新信号直接唤醒,保留原有逐帧动画速度。
             if (!anyActive && _subscribed)
             {
                 CompositionTarget.Rendering -= OnRendering;
                 _subscribed = false;
                 _lastFrame = DateTime.MinValue;
+                // 提交电平与解除订阅交错时也不能丢掉最后一次唤醒。
+                if (inputVersion != Volatile.Read(ref _inputVersion)) EnsureSubscribedOnUi();
             }
         }
     }
 
     private bool NeedsStep(DateTime now)
     {
+        lock (_levelSync) return NeedsStepCore();
+    }
+
+    private bool NeedsStepCore()
+    {
         double tl = DbToNorm(_targetL);
         double tr = DbToNorm(_targetR);
         return Math.Abs(tl - _display[0]) > 1e-4 || Math.Abs(tr - _display[1]) > 1e-4
-            || _peak[0] > 1e-4 || _peak[1] > 1e-4
-            || now <= _peakHoldUntil[0] || now <= _peakHoldUntil[1];
+            || Math.Abs(_peak[0] - tl) > 1e-4 || Math.Abs(_peak[1] - tr) > 1e-4;
     }
 
     /// <summary>推进一步动画;返回是否仍有未收敛的动画需要下一帧继续。</summary>
     private bool Step(DateTime now, double dt)
     {
-        double targetL = DbToNorm(_targetL);
-        double targetR = DbToNorm(_targetR);
-        bool changed = false;
-        changed |= StepChannel(0, targetL, now, dt);
-        changed |= StepChannel(1, targetR, now, dt);
-        if (changed) InvalidateVisual();
-        return changed || NeedsStep(now);
+        lock (_levelSync)
+        {
+            bool changed = StepChannel(0, DbToNorm(_targetL), now, dt);
+            changed |= StepChannel(1, DbToNorm(_targetR), now, dt);
+            if (changed) UpdateDynamicVisuals();
+            return changed || NeedsStepCore();
+        }
     }
 
     private bool StepChannel(int ch, double target, DateTime now, double dt)
@@ -271,7 +311,7 @@ public sealed class MeterBar : FrameworkElement
     private RenderTargetBitmap? _fillBmp;      // 单声道满高填充:渐变 + 横纹间隙(两声道内容一致,共用一张,bar 局部坐标)
     private double _backdropDestW, _backdropDestH; // 位图目标绘制尺寸(= 像素/dpi,保证 1:1 不缩放模糊)
     private double _fillDestW, _fillDestH;
-    private RectangleGeometry[]? _clipGeo;     // 每声道缓存的裁剪几何,逐帧仅改 Rect,避免每帧分配
+    private bool _dynamicReady;
 
     private void EnsureBrushes()
     {
@@ -330,7 +370,7 @@ public sealed class MeterBar : FrameworkElement
         if (_backdropBmp is not null
             && Math.Abs(w - _cachedW) < 0.05
             && Math.Abs(h - _cachedH) < 0.05
-            && Math.Abs(dpi - _cachedDpi) < 0.001)
+            && Math.Abs(dpi - _cachedDpi) < 0.001 && _dynamicReady)
             return;
 
         _cachedW = w;
@@ -424,47 +464,80 @@ public sealed class MeterBar : FrameworkElement
         _fillDestW = fpixW / dpi;
         _fillDestH = fpixH / dpi;
 
-        _clipGeo ??= [new RectangleGeometry(), new RectangleGeometry()];
+        for (int i = 0; i < 2; i++)
+        {
+            using (var dc = _levelVisuals[i].RenderOpen())
+                dc.DrawImage(_fillBmp, new Rect(0, 0, _fillDestW, _fillDestH));
+            _levelVisuals[i].Offset = new Vector(i * (barW + Gap) + 0.5, yTop);
+            DrawPeakVisual(i, _peak[i] >= 1 - 3.0 / 60);
+        }
+        _dynamicReady = true;
+        UpdateDynamicVisuals();
     }
+
+    protected override int VisualChildrenCount => 4;
+
+    protected override Visual GetVisualChild(int index) => index switch
+    {
+        0 => _levelVisuals[0],
+        1 => _peakVisuals[0],
+        2 => _levelVisuals[1],
+        3 => _peakVisuals[1],
+        _ => throw new ArgumentOutOfRangeException(nameof(index)),
+    };
 
     protected override void OnRender(DrawingContext dc)
     {
         double w = ActualWidth, h = ActualHeight;
-        if (w < 10 || h < 10) return;
+        if (w < 10 || h < 10)
+        {
+            for (int i = 0; i < 2; i++)
+            {
+                _levelVisuals[i].Opacity = 0;
+                _peakVisuals[i].Opacity = 0;
+            }
+            _dynamicReady = false;
+            return;
+        }
         EnsureBrushes();
         EnsureStaticCache(w, h);
 
         dc.DrawImage(_backdropBmp, new Rect(0, 0, _backdropDestW, _backdropDestH));
 
-        double barW = _cachedBarW, yTop = _cachedYTop, trackH = _cachedTrackH;
+    }
+
+    private void UpdateDynamicVisuals()
+    {
+        if (!_dynamicReady) return;
+        double barW = _cachedBarW, trackH = _cachedTrackH;
         for (int i = 0; i < 2; i++)
         {
-            var bar = new Rect(i * (barW + Gap) + 0.5, yTop, Math.Max(1, barW - 1), trackH);
-            DrawLevel(dc, i, bar, _display[i], trackH);
-            DrawPeak(dc, bar, _peak[i], trackH);
+            double fillH = trackH * _display[i];
+            bool showLevel = _display[i] > 0.001 && fillH >= 0.5;
+            _levelVisuals[i].Opacity = showLevel ? 1 : 0;
+            if (showLevel)
+            {
+                var clip = new Rect(0, trackH - fillH, Math.Max(1, barW - 1), fillH);
+                if (_clipGeo[i].Rect != clip) _clipGeo[i].Rect = clip;
+            }
+
+            bool showPeak = _peak[i] > 0.001;
+            _peakVisuals[i].Opacity = showPeak ? 1 : 0;
+            if (showPeak)
+            {
+                bool warning = _peak[i] >= 1 - 3.0 / 60;
+                if (_peakWarning[i] != warning) DrawPeakVisual(i, warning);
+                _peakVisuals[i].Offset = new Vector(i * (barW + Gap) + 0.5,
+                    _cachedYTop + trackH * (1 - _peak[i]));
+            }
         }
     }
 
-    private void DrawLevel(DrawingContext dc, int ch, Rect bar, double level, double h)
+    private void DrawPeakVisual(int channel, bool warning)
     {
-        if (level <= 0.001) return;
-        double fillH = h * level;
-        if (fillH < 0.5) return;
-
-        // 轴对齐矩形 Clip 走 Direct3D 硬件 Scissor 快路径(无圆角几何抗锯齿蒙版开销);
-        // 裁剪几何缓存复用(仅改 Rect,零分配),内部一次全高填充位图 blit
-        var geo = _clipGeo![ch];
-        geo.Rect = new Rect(bar.X, bar.Bottom - fillH, bar.Width, fillH);
-        dc.PushClip(geo);
-        dc.DrawImage(_fillBmp, new Rect(bar.X, bar.Y, _fillDestW, _fillDestH));
-        dc.Pop();
-    }
-
-    private void DrawPeak(DrawingContext dc, Rect bar, double peak, double h)
-    {
-        if (peak <= 0.001) return;
-        double py = bar.Y + h * (1 - peak);
-        var pen = peak >= 1 - 3.0 / 60 ? _peakWarnPen : _peakWhitePen;
-        dc.DrawLine(pen, new Point(bar.X + 0.5, py), new Point(bar.Right - 0.5, py));
+        _peakWarning[channel] = warning;
+        using var dc = _peakVisuals[channel].RenderOpen();
+        dc.DrawLine(warning ? _peakWarnPen : _peakWhitePen,
+            new Point(0.5, 0), new Point(Math.Max(1, _cachedBarW - 1) - 0.5, 0));
     }
 }
