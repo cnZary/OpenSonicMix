@@ -179,7 +179,7 @@ public partial class MainWindow : Window
             {
                 var el = _t0.ElapsedMilliseconds;
                 _t0 = null;
-                BottomBar.SetStatus($"{Loc.Get("Syncing")} {el} ms");
+                BottomBar.SetStatus(Loc.Format("SyncCompleted", el));
                 var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
                 timer.Tick += (_, _) => { timer.Stop(); UpdateStatus(_state.Connected); };
                 timer.Start();

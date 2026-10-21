@@ -80,6 +80,7 @@
   <data name="DeviceDisconnected" xml:space="preserve"><value>Device disconnected</value></data>
   <data name="TrayConnecting" xml:space="preserve"><value>Connecting to tray service…</value></data>
   <data name="Syncing" xml:space="preserve"><value>Syncing device state…</value></data>
+  <data name="SyncCompleted" xml:space="preserve"><value>Sync completed in {0} ms</value></data>
   <data name="Menu" xml:space="preserve"><value>Menu</value></data>
   <data name="Simulated" xml:space="preserve"><value>Simulated (no device)</value></data>
   <data name="PanelActivationFailed" xml:space="preserve"><value>A panel is already running, but its window could not be found. End SonicCube.Panel in Task Manager and try again.</value></data>

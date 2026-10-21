@@ -68,6 +68,7 @@
   <data name="DeviceDisconnected" xml:space="preserve"><value>设备已断开</value></data>
   <data name="TrayConnecting" xml:space="preserve"><value>正在连接托盘服务…</value></data>
   <data name="Syncing" xml:space="preserve"><value>正在同步设备状态…</value></data>
+  <data name="SyncCompleted" xml:space="preserve"><value>同步完成，用时 {0} ms</value></data>
   <data name="Menu" xml:space="preserve"><value>菜单</value></data>
   <data name="Simulated" xml:space="preserve"><value>模拟(无设备)</value></data>
   <data name="PanelActivationFailed" xml:space="preserve"><value>检测到已运行的面板，但未能找到它的窗口。请在任务管理器中结束 SonicCube.Panel 后重试。</value></data>
