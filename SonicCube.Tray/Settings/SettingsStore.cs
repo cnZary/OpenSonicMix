@@ -14,7 +14,12 @@ public sealed class SettingsStore
     public static string SettingsPath { get; } = Path.Combine(ConfigDir, "settings.json");
     public static string LogsDir { get; } = Path.Combine(ConfigDir, "logs");
 
-    public AppSettings Current { get; private set; } = new();
+    private readonly object _sync = new();
+    private readonly string _settingsPath;
+    private AppSettings _current = new();
+    public AppSettings Current => Volatile.Read(ref _current);
+
+    public SettingsStore(string? settingsPath = null) => _settingsPath = settingsPath ?? SettingsPath;
 
     /// <summary>配置变更事件(保存后触发)。</summary>
     public event Action<AppSettings>? Changed;
@@ -23,11 +28,11 @@ public sealed class SettingsStore
     {
         try
         {
-            if (File.Exists(SettingsPath))
+            if (File.Exists(_settingsPath))
             {
-                var json = File.ReadAllText(SettingsPath);
+                var json = File.ReadAllText(_settingsPath);
                 var s = JsonSerializer.Deserialize(json, SettingsJsonContext.Default.AppSettings);
-                if (s != null) Current = s;
+                if (s != null) Volatile.Write(ref _current, s);
             }
         }
         catch (Exception ex)
@@ -37,27 +42,44 @@ public sealed class SettingsStore
         return Current;
     }
 
-    public void Save()
-    {
-        try
-        {
-            Directory.CreateDirectory(ConfigDir);
-            var json = JsonSerializer.Serialize(Current, SettingsJsonContext.Default.AppSettings);
-            var tmp = SettingsPath + ".tmp";
-            File.WriteAllText(tmp, json);
-            File.Move(tmp, SettingsPath, overwrite: true);
-        }
-        catch (Exception ex)
-        {
-            Logging.Logger.Error("Settings", $"保存配置失败: {ex.Message}");
-        }
-        Changed?.Invoke(Current);
-    }
+    public void Save() => TryApplyUpdate(_ => { }, out _);
 
     /// <summary>应用来自 IPC 的部分更新(仅更新提供的字段),保存并广播。</summary>
-    public void ApplyUpdate(Action<AppSettings> mutate)
+    public void ApplyUpdate(Action<AppSettings> mutate) => TryApplyUpdate(mutate, out _);
+
+    /// <summary>先克隆与持久化，再发布新快照；失败不改变内存状态或发送成功通知。</summary>
+    public bool TryApplyUpdate(Action<AppSettings> mutate, out string? error)
     {
-        mutate(Current);
-        Save();
+        AppSettings next;
+        lock (_sync)
+        {
+            string? temporaryPath = null;
+            try
+            {
+                next = JsonSerializer.Deserialize(JsonSerializer.Serialize(Current, SettingsJsonContext.Default.AppSettings),
+                    SettingsJsonContext.Default.AppSettings)!;
+                mutate(next);
+                var directory = Path.GetDirectoryName(Path.GetFullPath(_settingsPath))!;
+                Directory.CreateDirectory(directory);
+                temporaryPath = Path.Combine(directory, $".settings-{Guid.NewGuid():N}.tmp");
+                File.WriteAllText(temporaryPath, JsonSerializer.Serialize(next, SettingsJsonContext.Default.AppSettings));
+                File.Move(temporaryPath, _settingsPath, overwrite: true);
+                Volatile.Write(ref _current, next);
+                error = null;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                Logging.Logger.Error("Settings", $"保存配置失败: {ex.Message}");
+                return false;
+            }
+            finally
+            {
+                if (temporaryPath is not null)
+                    try { File.Delete(temporaryPath); } catch { }
+            }
+        }
+        Changed?.Invoke(next);
+        return true;
     }
 }

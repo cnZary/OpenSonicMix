@@ -21,7 +21,8 @@ public sealed class GraphicEqControl : FrameworkElement
         MinHeight = 148;
         Cursor = Cursors.Cross;
         AutomationProperties.SetName(this, "Global EQ");
-        IsEnabledChanged += (_, _) => InvalidateVisual();
+        IsEnabledChanged += (_, _) => { if (!IsEnabled) CancelDrag(); InvalidateVisual(); };
+        Unloaded += (_, _) => CancelDrag();
     }
 
     // location: 0/1(低切 freq/gain), 2/3/4(峰 freq/Q/gain), 5/6(高切 freq/gain)
@@ -29,19 +30,50 @@ public sealed class GraphicEqControl : FrameworkElement
 
     private readonly double[] _freq = { 100, 1000, 5000 };
     private readonly double[] _gain = { 0, 0, 0 };
+    private readonly double[] _synchronizedFreq = { 100, 1000, 5000 };
+    private readonly double[] _synchronizedGain = { 0, 0, 0 };
     private double _q = 0.7;
     private int _dragIndex = -1;
     private int _hoverIndex = -1;
 
     public void SetPoint(int i, double freq, double gain)
     {
+        freq = Math.Clamp(freq, 20, 20000);
+        gain = Math.Clamp(gain, -20, 20);
+        _synchronizedFreq[i] = freq;
+        _synchronizedGain[i] = gain;
         if (_dragIndex == i) return;
-        _freq[i] = Math.Clamp(freq, 20, 20000);
-        _gain[i] = Math.Clamp(gain, -20, 20);
+        if (_freq[i] == freq && _gain[i] == gain) return;
+        _freq[i] = freq;
+        _gain[i] = gain;
+        _curveDirty = true;
         InvalidateVisual();
     }
 
-    public void SetQ(double q) { _q = Math.Clamp(q, 0.1, 10); InvalidateVisual(); }
+    public void SetQ(double q)
+    {
+        q = Math.Clamp(q, 0.1, 10);
+        if (_q == q) return;
+        _q = q;
+        _curveDirty = true;
+        InvalidateVisual();
+    }
+
+    private void CancelDrag()
+    {
+        int i = _dragIndex;
+        _dragIndex = _hoverIndex = -1;
+        if (IsMouseCaptured) ReleaseMouseCapture();
+        if (i >= 0) SetPoint(i, _synchronizedFreq[i], _synchronizedGain[i]);
+        Cursor = Cursors.Cross;
+        InvalidateVisual();
+    }
+
+    protected override void OnLostMouseCapture(MouseEventArgs e)
+    {
+        base.OnLostMouseCapture(e);
+        if (_dragIndex >= 0) CancelDrag();
+    }
 
     private double PointX(int i) => ValueMapping.EqFreqToNorm(_freq[i]) * ActualWidth;
     private double PointY(int i) => ValueMapping.EqGainToNorm(_gain[i]) * ActualHeight;
@@ -154,6 +186,7 @@ public sealed class GraphicEqControl : FrameworkElement
         }
         _freq[_dragIndex] = ValueMapping.EqPixelToFreq(p.X, ActualWidth);
         _gain[_dragIndex] = ValueMapping.EqPixelToGain(p.Y, ActualHeight);
+        _curveDirty = true;
         InvalidateVisual();
     }
 
@@ -182,6 +215,7 @@ public sealed class GraphicEqControl : FrameworkElement
         double nq = Math.Clamp(_q + (e.Delta > 0 ? 0.05 : -0.05), 0.1, 10);
         if (Math.Abs(nq - _q) < 1e-6) return;
         _q = nq;
+        _curveDirty = true;
         InvalidateVisual();
         ParameterCommitted?.Invoke(3, (float)nq);
         e.Handled = true;
@@ -256,15 +290,13 @@ public sealed class GraphicEqControl : FrameworkElement
         _staticBackdrop = backdrop;
     }
 
-    protected override void OnRender(DrawingContext dc)
-    {
-        double w = ActualWidth, h = ActualHeight;
-        if (w < 8 || h < 8) return;
-        EnsureResources();
-        var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
-        EnsureStaticCache(w, h, dpi);
-        dc.DrawDrawing(_staticBackdrop);
+    private bool _curveDirty = true;
+    private double _curveW, _curveH;
+    private StreamGeometry? _strokeGeometry, _fillGeometry;
 
+    private void EnsureCurveCache(double w, double h)
+    {
+        if (!_curveDirty && _curveW == w && _curveH == h) return;
         double midY = Math.Round(h / 2) + 0.5;
 
         // 2. 响应曲线与半透明包络填充
@@ -295,8 +327,24 @@ public sealed class GraphicEqControl : FrameworkElement
         }
         strokeGeo.Freeze();
         fillGeo.Freeze();
-        dc.DrawGeometry(_curveAreaFill, null, fillGeo);
-        dc.DrawGeometry(null, _curvePen, strokeGeo);
+        _strokeGeometry = strokeGeo;
+        _fillGeometry = fillGeo;
+        _curveW = w;
+        _curveH = h;
+        _curveDirty = false;
+    }
+
+    protected override void OnRender(DrawingContext dc)
+    {
+        double w = ActualWidth, h = ActualHeight;
+        if (w < 8 || h < 8) return;
+        EnsureResources();
+        var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        EnsureStaticCache(w, h, dpi);
+        dc.DrawDrawing(_staticBackdrop);
+        EnsureCurveCache(w, h);
+        dc.DrawGeometry(_curveAreaFill, null, _fillGeometry);
+        dc.DrawGeometry(null, _curvePen, _strokeGeometry);
 
         // 3. 三频段控制点，仅悬停/拖动时显示反馈环。
         for (int i = 0; i < 3; i++)

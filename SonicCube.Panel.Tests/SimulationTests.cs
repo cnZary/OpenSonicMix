@@ -249,6 +249,8 @@ public sealed partial class SimulationTests
             Assert.AreEqual(Visibility.Visible, masks[0].Visibility);
             AssertResetDuringEchoSuppression(window);
             AssertLocalSettingsPreview(window);
+            AssertFaderReadoutConsistency(window);
+            AssertInteractionRecovery();
         }
         finally { StopSimulationTimer(window); }
     }

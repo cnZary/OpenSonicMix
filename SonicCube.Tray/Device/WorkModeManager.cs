@@ -270,12 +270,23 @@ public sealed class WorkModeManager
     // ── 模式切换 ────────────────────────────────────────────
 
     /// <summary>动态切换工作模式(见 5.5),不丢命令,不触发自动动作。</summary>
-    public void SetMode(WorkMode mode)
+    public void SetMode(WorkMode mode) => TrySetMode(mode, out _);
+
+    public bool TrySetMode(WorkMode mode, out string? error)
     {
         var old = CurrentMode;
+        error = null;
+        if (old == mode) return true;
+        if (!_settings.TryApplyUpdate(s => s.Mode = mode, out error)) return false;
+        ApplyPersistedMode(old);
+        return true;
+    }
+
+    /// <summary>完整设置事务保存成功后调用，只更新运行时，不重复保存。</summary>
+    public void ApplyPersistedMode(WorkMode old)
+    {
+        var mode = CurrentMode;
         if (old == mode) return;
-        _settings.Current.Mode = mode;
-        _settings.Save();
         Logging.Logger.Info("Mode", $"工作模式切换: {old} → {mode}");
 
         if (mode == WorkMode.FastConnection)

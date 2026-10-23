@@ -249,7 +249,7 @@ public partial class EffectSectionView : UserControl
 
     private void OnHpfSelected(int ch, int opt)
     {
-        if (_suppressHpf) return;
+        if (_suppressHpf || _hpfBtns?[ch, opt].IsEnabled != true) return;
         _suppressHpf = true;
         if (_hpfBtns != null)
         {
@@ -300,12 +300,26 @@ public partial class EffectSectionView : UserControl
         _suppressHpf = true;
         for (int ch = 0; ch < 2; ch++)
         {
+            for (int opt = 0; opt < 2; opt++)
+            {
+                if (p.HpfSw[ch] != 1 && _hpfBtns[ch, opt].IsKeyboardFocusWithin)
+                    System.Windows.Input.Keyboard.ClearFocus();
+                _hpfBtns[ch, opt].IsEnabled = p.HpfSw[ch] == 1;
+            }
             _hpfBtns[ch, 0].IsChecked = p.LowCut[ch] == 0;
             _hpfBtns[ch, 1].IsChecked = p.LowCut[ch] == 1;
             if (_hpfMasks != null)
                 _hpfMasks[ch].Visibility = p.HpfSw[ch] == 1 ? Visibility.Collapsed : Visibility.Visible;
         }
         _suppressHpf = false;
+    }
+
+    public void FailFxWrite(int module, int param, float expected)
+    {
+        _comp?.FailFxWrite(module, param, expected);
+        _inst?.FailFxWrite(module, param, expected);
+        _eq2?.FailFxWrite(module, param, expected);
+        _graphEq?.FailFxWrite(module, param, expected);
     }
 
     private static void SyncFxParams(AlgorithmEditorView? panel, int module, PresetState p)

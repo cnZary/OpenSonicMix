@@ -33,7 +33,19 @@ public partial class GlobalEqEditorView : System.Windows.Controls.UserControl
         VolValue.Text = ((int)Math.Round(Vol.Value)).ToString();
     }
 
-    public void SetMask(bool masked) => Mask.Visibility = masked ? Visibility.Visible : Visibility.Collapsed;
+    public void SetMask(bool masked)
+    {
+        Mask.Visibility = masked ? Visibility.Visible : Visibility.Collapsed;
+        Eq.IsEnabled = Vol.IsEnabled = !masked;
+        if (masked && (Eq.IsKeyboardFocusWithin || Vol.IsKeyboardFocusWithin))
+            System.Windows.Input.Keyboard.ClearFocus();
+    }
+
+    public void FailFxWrite(int module, int param, float expected)
+    {
+        if (module == FxCatalog.ModuleGraphEq && param == 7)
+            Vol.FailPendingWrite(ValueMapping.GlobalEqVolToUi(expected));
+    }
 
     private void ApplyLocalization()
     {

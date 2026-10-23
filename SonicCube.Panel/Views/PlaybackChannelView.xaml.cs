@@ -44,7 +44,7 @@ public partial class PlaybackChannelView : UserControl
         BtnMute.IsChecked = p.MuteSw[FaderLocation] == 1;
         _suppress = false;
         Fader.SetDbSilently(p.VolPot[FaderLocation]);
-        FaderValue.Text = ValueMapping.FaderText(p.VolPot[FaderLocation]);
+        FaderValue.Text = ValueMapping.FaderText(Fader.Db);
     }
 
     public void SetMeter(float l, float r) => Meter.SetLevelDb(l, r);

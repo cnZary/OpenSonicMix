@@ -80,10 +80,19 @@ public partial class InputChannelView : UserControl
         Pan.IsEnabled = mono;
         Pan.SetValueSilently(p.Phase[_ch]);
         Fader.SetDbSilently(p.VolPot[_ch]);
-        FaderValue.Text = ValueMapping.FaderText(p.VolPot[_ch]);
+        FaderValue.Text = ValueMapping.FaderText(Fader.Db);
     }
 
     public void SetMeter(float l, float r) => Meter.SetLevelDb(l, r);
+
+    public void FailFloatWrite(uint address, float expected)
+    {
+        if (address == CommandAddress.WithLocation(CommandAddress.Send, _ch)
+            && ValueMapping.SendToProtocol(SendKnob.Value) == expected)
+            SendKnob.FailPendingWrite(SendKnob.Value);
+        else if (address == CommandAddress.WithLocation(CommandAddress.Phase, _ch))
+            Pan.FailPendingWrite(expected);
+    }
 
     private void ApplyLocalization()
     {

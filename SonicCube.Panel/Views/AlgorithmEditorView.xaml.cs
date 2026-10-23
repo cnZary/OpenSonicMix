@@ -15,7 +15,7 @@ namespace SonicCube.Panel.Views;
 public partial class AlgorithmEditorView : UserControl
 {
     private readonly int _module;
-    private readonly List<(FrameworkElement Element, Action<float> Sync)> _editors = new();
+    private readonly List<(FrameworkElement Element, Action<float> Sync, Action<float> Fail)> _editors = new();
     private bool _suppressAlg;
 
     public event Action<int /*fxId*/>? AlgorithmChangeRequested;
@@ -79,7 +79,7 @@ public partial class AlgorithmEditorView : UserControl
 
     private bool UsesFader(FxParamDef p) => _module == FxCatalog.ModuleEq || p.WidgetType == 3;
 
-    private (FrameworkElement Element, Action<float> Sync) CreateKnob(FxParamDef p)
+    private (FrameworkElement Element, Action<float> Sync, Action<float> Fail) CreateKnob(FxParamDef p)
     {
         var knob = new KnobControl
         {
@@ -89,10 +89,10 @@ public partial class AlgorithmEditorView : UserControl
         };
         knob.Configure(p.Min, p.Max, p.Step, p.Default, p.Name);
         knob.ValueCommitted += v => FxParamRequested?.Invoke(_module, p.AlgId, (float)v);
-        return (knob, v => knob.SetValueSilently(v));
+        return (knob, v => knob.SetValueSilently(v), v => knob.FailPendingWrite(v));
     }
 
-    private (FrameworkElement Element, Action<float> Sync) CreateFader(FxParamDef p)
+    private (FrameworkElement Element, Action<float> Sync, Action<float> Fail) CreateFader(FxParamDef p)
     {
         var column = new Grid();
         column.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -107,6 +107,7 @@ public partial class AlgorithmEditorView : UserControl
             HorizontalAlignment = HorizontalAlignment.Center,
         };
         AutomationProperties.SetName(fader, p.Name);
+        fader.SetValueSilently(p.Default);
         fader.ValueCommitted += v => FxParamRequested?.Invoke(_module, p.AlgId, (float)v);
         Grid.SetRow(fader, 1);
 
@@ -121,7 +122,7 @@ public partial class AlgorithmEditorView : UserControl
         column.Children.Add(label);
         column.Children.Add(fader);
         column.Children.Add(readout);
-        return (column, v => fader.SetValueSilently(v));
+        return (column, v => fader.SetValueSilently(v), v => fader.FailPendingWrite(v));
     }
 
     private void ArrangeParameters()
@@ -170,5 +171,19 @@ public partial class AlgorithmEditorView : UserControl
                 _editors[i].Sync(value);
     }
 
-    public void SetMask(bool masked) => Mask.Visibility = masked ? Visibility.Visible : Visibility.Collapsed;
+    public void SetMask(bool masked)
+    {
+        Mask.Visibility = masked ? Visibility.Visible : Visibility.Collapsed;
+        AlgSelect.IsEnabled = KnobHost.IsEnabled = !masked;
+        if (masked && (AlgSelect.IsKeyboardFocusWithin || KnobHost.IsKeyboardFocusWithin))
+            System.Windows.Input.Keyboard.ClearFocus();
+    }
+
+    public void FailFxWrite(int module, int param, float expected)
+    {
+        if (module != _module || CurrentAlg is not { } alg) return;
+        for (int i = 0; i < alg.Params.Length && i < _editors.Count; i++)
+            if (alg.Params[i].AlgId == param)
+                _editors[i].Fail(expected);
+    }
 }

@@ -21,10 +21,14 @@ public sealed class IpcServer
     private readonly SettingsStore _settings;
 
     private readonly object _sync = new();
+    // Capture, version and enqueue together. Connection transitions and device updates
+    // otherwise race GetState replies, making a newer version carry older state.
+    private readonly object _stateSync = new();
     private PipeConnection? _client;
     private CancellationTokenSource? _listenCts;
+    private CancellationTokenSource? _clientLifetime;
     private long _stateVersion;
-    private bool _clientSubscribed;
+    private volatile bool _clientSubscribed;
 
     // 电平合并最新值
     private float[]? _pendingMeters;
@@ -99,8 +103,11 @@ public sealed class IpcServer
 
     private void OnClientConnected(PipeConnection conn)
     {
-        lock (_sync) _client = conn;
-        conn.MessageReceived += msg => OnClientMessage(conn, msg);
+        var lifetime = CancellationTokenSource.CreateLinkedTokenSource(_listenCts!.Token);
+        var cancellationToken = lifetime.Token;
+        lock (_sync) { _client = conn; _clientLifetime = lifetime; }
+        conn.Disconnected += lifetime.Cancel;
+        conn.MessageReceived += msg => OnClientMessage(conn, msg, cancellationToken);
         Logging.Logger.Info("IPC", "Panel 已连接");
         _modeManager.NotifyPanelOpened();
         BroadcastDeviceStatus();
@@ -108,10 +115,12 @@ public sealed class IpcServer
 
     private void OnClientDisconnected(PipeConnection conn)
     {
+        CancellationTokenSource? lifetime = null;
         lock (_sync)
         {
-            if (ReferenceEquals(_client, conn)) _client = null;
+            if (ReferenceEquals(_client, conn)) { _client = null; lifetime = _clientLifetime; _clientLifetime = null; }
         }
+        if (lifetime is not null) { lifetime.Cancel(); conn.Disconnected -= lifetime.Cancel; lifetime.Dispose(); }
         _clientSubscribed = false;
         conn.Dispose();
         Logging.Logger.Info("IPC", "Panel 已断开");
@@ -120,8 +129,9 @@ public sealed class IpcServer
 
     // ── 消息处理 ────────────────────────────────────────────
 
-    private void OnClientMessage(PipeConnection conn, IpcMessage msg)
+    private void OnClientMessage(PipeConnection conn, IpcMessage msg, CancellationToken cancellationToken)
     {
+        if (cancellationToken.IsCancellationRequested) return;
         switch (msg.Type)
         {
             case IpcMessageType.GetState:
@@ -141,13 +151,13 @@ public sealed class IpcServer
                 _ = ReplyAsync(conn, msg.RequestId, true);
                 break;
             case IpcMessageType.ToggleSwitch:
-                HandleToggle(conn, msg);
+                HandleToggle(conn, msg, cancellationToken);
                 break;
             case IpcMessageType.SetParameter:
-                HandleSetParameter(conn, msg);
+                HandleSetParameter(conn, msg, cancellationToken);
                 break;
             case IpcMessageType.ResetModule:
-                HandleResetModule(conn, msg);
+                HandleResetModule(conn, msg, cancellationToken);
                 break;
             case IpcMessageType.SetWorkMode:
                 HandleSetWorkMode(conn, msg);
@@ -161,7 +171,19 @@ public sealed class IpcServer
         }
     }
 
-    private void HandleToggle(PipeConnection conn, IpcMessage msg)
+    private static TimeSpan RequestBudget(IpcMessage msg) => TimeSpan.FromMilliseconds(
+        msg.DeadlineUnixMs is long deadline
+            ? Math.Clamp((double)deadline - DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), 0, 15000)
+            : 15000);
+
+    private async Task FinishCommandAsync(PipeConnection conn, IpcMessage msg, Task<CommandResult> command)
+    {
+        var result = await command.ConfigureAwait(false);
+        if (result.ErrorCode != "superseded") _modeManager.NotifyUserActivity();
+        await ReplyAsync(conn, msg.RequestId, result.Success, result.ErrorCode, result.ErrorDetail).ConfigureAwait(false);
+    }
+
+    private void HandleToggle(PipeConnection conn, IpcMessage msg, CancellationToken cancellationToken)
     {
         if (!Enum.TryParse<QuickSwitch>(msg.Switch, ignoreCase: true, out var sw))
         {
@@ -169,56 +191,46 @@ public sealed class IpcServer
             _ = SendErrorAsync(conn, msg.RequestId, "bad_switch", "无效开关");
             return;
         }
-        _ = Task.Run(async () =>
-        {
-            var r = await _coordinator.ToggleSwitchAsync(sw, ActionSource.ManualPanel);
-            _modeManager.NotifyUserActivity();
-            await ReplyAsync(conn, msg.RequestId, r.Success, r.ErrorCode, r.ErrorDetail);
-        });
+        _ = FinishCommandAsync(conn, msg, _coordinator.ToggleSwitchAsync(sw, ActionSource.ManualPanel, RequestBudget(msg), cancellationToken));
     }
 
-    private void HandleSetParameter(PipeConnection conn, IpcMessage msg)
+    private void HandleSetParameter(PipeConnection conn, IpcMessage msg, CancellationToken cancellationToken)
     {
-        _ = Task.Run(async () =>
+        // Enqueue on the pipe reader before awaiting: Task.Run here can reorder an algorithm
+        // selection/reset and the parameter writes that follow it.
+        Task<CommandResult> command;
+        var budget = RequestBudget(msg);
+        if (msg.Address.HasValue && msg.IntValue.HasValue)
+            command = _coordinator.SetParameterAsync(msg.Address.Value, msg.IntValue.Value, ActionSource.ManualPanel, budget, cancellationToken);
+        else if (msg.Address.HasValue && msg.FloatValue.HasValue)
+            command = _coordinator.SetParameterFloatAsync(msg.Address.Value, msg.FloatValue.Value, ActionSource.ManualPanel, budget, cancellationToken);
+        else if (msg.Module.HasValue && msg.ParamIndex.HasValue && msg.FloatValue.HasValue)
+            command = _coordinator.SetFxParameterAsync(msg.Module.Value, msg.ParamIndex.Value, msg.FloatValue.Value, ActionSource.ManualPanel, budget, cancellationToken);
+        else
         {
-            CommandResult r;
-            if (msg.Address.HasValue && msg.IntValue.HasValue)
-                r = await _coordinator.SetParameterAsync(msg.Address.Value, msg.IntValue.Value, ActionSource.ManualPanel);
-            else if (msg.Address.HasValue && msg.FloatValue.HasValue)
-                r = await _coordinator.SetParameterFloatAsync(msg.Address.Value, msg.FloatValue.Value, ActionSource.ManualPanel);
-            else if (msg.Module.HasValue && msg.ParamIndex.HasValue && msg.FloatValue.HasValue)
-                r = await _coordinator.SetFxParameterAsync(msg.Module.Value, msg.ParamIndex.Value, msg.FloatValue.Value, ActionSource.ManualPanel);
-            else
-            {
-                await SendErrorAsync(conn, msg.RequestId, "bad_param", "参数不完整");
-                return;
-            }
-            _modeManager.NotifyUserActivity();
-            await ReplyAsync(conn, msg.RequestId, r.Success, r.ErrorCode, r.ErrorDetail);
-        });
+            _ = SendErrorAsync(conn, msg.RequestId, "bad_param", "参数不完整");
+            return;
+        }
+        _ = FinishCommandAsync(conn, msg, command);
     }
 
     private void HandleSetWorkMode(PipeConnection conn, IpcMessage msg)
     {
         var mode = string.Equals(msg.WorkMode, "fastConnection", StringComparison.OrdinalIgnoreCase)
             ? WorkMode.FastConnection : WorkMode.LowResource;
-        _modeManager.SetMode(mode);
-        _ = ReplyAsync(conn, msg.RequestId, true);
+        if (RequestBudget(msg) <= TimeSpan.Zero) { _ = ReplyAsync(conn, msg.RequestId, false, "timeout"); return; }
+        bool saved = _modeManager.TrySetMode(mode, out var error);
+        _ = ReplyAsync(conn, msg.RequestId, saved, saved ? null : "settings_save", error);
     }
 
-    private void HandleResetModule(PipeConnection conn, IpcMessage msg)
+    private void HandleResetModule(PipeConnection conn, IpcMessage msg, CancellationToken cancellationToken)
     {
         if (!msg.Module.HasValue)
         {
             _ = SendErrorAsync(conn, msg.RequestId, "bad_param", "缺少 module");
             return;
         }
-        _ = Task.Run(async () =>
-        {
-            var r = await _coordinator.ResetModuleAsync(msg.Module.Value, ActionSource.ManualPanel);
-            _modeManager.NotifyUserActivity();
-            await ReplyAsync(conn, msg.RequestId, r.Success, r.ErrorCode, r.ErrorDetail);
-        });
+        _ = FinishCommandAsync(conn, msg, _coordinator.ResetModuleAsync(msg.Module.Value, ActionSource.ManualPanel, RequestBudget(msg), cancellationToken));
     }
 
     private void HandleUpdateSettings(PipeConnection conn, IpcMessage msg)
@@ -229,73 +241,46 @@ public sealed class IpcServer
             _ = SendErrorAsync(conn, msg.RequestId, "bad_settings", "缺少 settings");
             return;
         }
-        var s = _settings.Current;
-        if (dto.Language != null) s.Language = dto.Language;
-        if (dto.StartWithWindows.HasValue)
+        if (RequestBudget(msg) <= TimeSpan.Zero) { _ = ReplyAsync(conn, msg.RequestId, false, "timeout"); return; }
+        var previousMode = _settings.Current.Mode;
+        bool saved = _settings.TryApplyUpdate(s =>
         {
-            s.StartWithWindows = dto.StartWithWindows.Value;
-            Startup.StartupManager.Apply(s.StartWithWindows);
-        }
-        if (dto.IdleDisconnectSeconds.HasValue) s.IdleDisconnectSeconds = dto.IdleDisconnectSeconds.Value;
-        if (dto.Enable48V.HasValue) s.Startup.Enable48V = dto.Enable48V.Value;
-        if (dto.EnableEFX.HasValue) s.Startup.EnableEFX = dto.EnableEFX.Value;
-        if (dto.ReapplyOnReconnect.HasValue) s.Startup.ReapplyOnReconnect = dto.ReapplyOnReconnect.Value;
-        if (dto.PhantomPowerConsent.HasValue) s.Startup.PhantomPowerConsent = dto.PhantomPowerConsent.Value;
-        if (dto.AlwaysOnTop.HasValue) s.Panel.AlwaysOnTop = dto.AlwaysOnTop.Value;
-        _settings.Save();
-
-        // 工作模式单独走 SetMode 以触发运行时切换。
-        if (dto.WorkMode != null)
+            if (dto.Language != null) s.Language = dto.Language;
+            if (dto.StartWithWindows.HasValue) s.StartWithWindows = dto.StartWithWindows.Value;
+            if (dto.IdleDisconnectSeconds.HasValue) s.IdleDisconnectSeconds = dto.IdleDisconnectSeconds.Value;
+            if (dto.Enable48V.HasValue) s.Startup.Enable48V = dto.Enable48V.Value;
+            if (dto.EnableEFX.HasValue) s.Startup.EnableEFX = dto.EnableEFX.Value;
+            if (dto.ReapplyOnReconnect.HasValue) s.Startup.ReapplyOnReconnect = dto.ReapplyOnReconnect.Value;
+            if (dto.PhantomPowerConsent.HasValue) s.Startup.PhantomPowerConsent = dto.PhantomPowerConsent.Value;
+            if (dto.AlwaysOnTop.HasValue) s.Panel.AlwaysOnTop = dto.AlwaysOnTop.Value;
+            if (dto.WorkMode != null)
+                s.Mode = string.Equals(dto.WorkMode, "fastConnection", StringComparison.OrdinalIgnoreCase)
+                    ? WorkMode.FastConnection : WorkMode.LowResource;
+        }, out var error);
+        if (saved)
         {
-            var mode = string.Equals(dto.WorkMode, "fastConnection", StringComparison.OrdinalIgnoreCase)
-                ? WorkMode.FastConnection : WorkMode.LowResource;
-            _modeManager.SetMode(mode);
+            if (dto.StartWithWindows.HasValue) Startup.StartupManager.Apply(_settings.Current.StartWithWindows);
+            _modeManager.ApplyPersistedMode(previousMode);
         }
-        _ = ReplyAsync(conn, msg.RequestId, true);
+        _ = ReplyAsync(conn, msg.RequestId, saved, saved ? null : "settings_save", error);
     }
 
     // ── 快照 / 广播 ─────────────────────────────────────────
 
-    private async Task SendStateSnapshotAsync(PipeConnection conn, string? requestId)
+    private Task SendStateSnapshotAsync(PipeConnection conn, string? requestId)
     {
-        var dto = BuildStateDto();
-        await conn.SendAsync(new IpcMessage
+        lock (_stateSync)
         {
-            Type = IpcMessageType.CommandResult,
-            RequestId = requestId,
-            Success = true,
-            Version = Interlocked.Read(ref _stateVersion),
-            State = dto,
-        });
-    }
-
-    private DeviceStateDto BuildStateDto()
-    {
-        var g = _coordinator.Session?.Global;
-        var p = _coordinator.Session?.Preset;
-        var dto = new DeviceStateDto { Connected = _coordinator.IsConnected };
-        if (g != null)
-        {
-            dto.Phantom48V = g.Phantom48V; dto.Efx = g.Efx; dto.ReverbOn = g.ReverbOn;
-            dto.Monitor = g.Monitor; dto.OnAir = g.OnAir; dto.MasterMute = g.MasterMute;
+            var dto = _coordinator.GetStateSnapshot();
+            return conn.SendAsync(new IpcMessage
+            {
+                Type = IpcMessageType.CommandResult,
+                RequestId = requestId,
+                Success = true,
+                Version = ++_stateVersion,
+                State = dto,
+            });
         }
-        if (p != null)
-        {
-            Array.Copy(p.InverseSw, dto.InverseSw, 2);
-            Array.Copy(p.HpfSw, dto.HpfSw, 2);
-            Array.Copy(p.LowCut, dto.LowCut, 2);
-            Array.Copy(p.LoopbackSw, dto.LoopbackSw, 2);
-            dto.DspRecSw = p.DspRecSw; dto.FxModuleEn = p.FxModuleEn;
-            Array.Copy(p.FxAlg, dto.FxAlg, 6);
-            Array.Copy(p.FxParaVal, dto.FxParaVal, Math.Min(96, p.FxParaVal.Length));
-            Array.Copy(p.MuteSw, dto.MuteSw, 4);
-            Array.Copy(p.SoloSw, dto.SoloSw, 2);
-            Array.Copy(p.VolPot, dto.VolPot, 4);
-            Array.Copy(p.Phase, dto.Phase, 2);
-            Array.Copy(p.Send, dto.Send, 2);
-            dto.MonoSw = p.MonoSw;
-        }
-        return dto;
     }
 
     private async Task SendSettingsAsync(PipeConnection conn, string? requestId)
@@ -326,24 +311,25 @@ public sealed class IpcServer
     {
         // 电平包已由 Meters 通道单独推送,跳过快照广播,避免 25fps 下重复构建全量 DTO。
         if (CommandAddress.TypeOf(cmdAddr) == CommandAddress.PickOut) return;
-        Interlocked.Increment(ref _stateVersion);
         if (!_clientSubscribed) return;
-        // 对订阅端广播整包/单项状态变化。为控制频率,仅转发并附带版本号。
-        var dto = BuildStateDto();
-        Broadcast(new IpcMessage
+        lock (_stateSync)
         {
-            Type = IpcMessageType.StateChanged,
-            Version = Interlocked.Read(ref _stateVersion),
-            State = dto,
-            DeviceStatus = _coordinator.IsConnected ? "connected" : "disconnected",
-        });
+            var dto = _coordinator.GetStateSnapshot();
+            Broadcast(new IpcMessage
+            {
+                Type = IpcMessageType.StateChanged,
+                Version = ++_stateVersion,
+                State = dto,
+                DeviceStatus = dto.Connected ? "connected" : "disconnected",
+            });
+        }
     }
 
     private void OnMeters(float[] m)
     {
         if (!_clientSubscribed) return;
         // 合并最新值:仅保留最新电平,防止积压。
-        _pendingMeters = m;
+        Interlocked.Exchange(ref _pendingMeters, m);
         if (Interlocked.Exchange(ref _meterBroadcastBusy, 1) == 0)
             _ = FlushMetersAsync();
     }
@@ -355,8 +341,7 @@ public sealed class IpcServer
         {
             while (true)
             {
-                var m = _pendingMeters;
-                _pendingMeters = null;
+                var m = Interlocked.Exchange(ref _pendingMeters, null);
                 if (m == null) break;
                 Broadcast(new IpcMessage { Type = IpcMessageType.MeterUpdate, Meters = m });
                 await timer.WaitForNextTickAsync().ConfigureAwait(false);
@@ -365,6 +350,9 @@ public sealed class IpcServer
         finally
         {
             Interlocked.Exchange(ref _meterBroadcastBusy, 0);
+            // A last update can arrive after the empty read but before busy is cleared.
+            if (Volatile.Read(ref _pendingMeters) != null && Interlocked.Exchange(ref _meterBroadcastBusy, 1) == 0)
+                _ = FlushMetersAsync();
         }
     }
 
@@ -372,11 +360,17 @@ public sealed class IpcServer
 
     private void BroadcastDeviceStatus()
     {
-        Broadcast(new IpcMessage
+        lock (_stateSync)
         {
-            Type = IpcMessageType.DeviceStatusChanged,
-            DeviceStatus = _coordinator.IsConnected ? "connected" : "disconnected",
-        });
+            var dto = _coordinator.GetStateSnapshot();
+            Broadcast(new IpcMessage
+            {
+                Type = IpcMessageType.DeviceStatusChanged,
+                Version = ++_stateVersion,
+                State = dto,
+                DeviceStatus = dto.Connected ? "connected" : "disconnected",
+            });
+        }
     }
 
     private void BroadcastSettings()
@@ -444,6 +438,9 @@ public sealed class IpcServer
     public void Stop()
     {
         _listenCts?.Cancel();
-        lock (_sync) { _client?.Dispose(); _client = null; }
+        // Let OnClientDisconnected own lifetime cleanup after the read loop unwinds.
+        PipeConnection? client;
+        lock (_sync) client = _client;
+        client?.Dispose();
     }
 }

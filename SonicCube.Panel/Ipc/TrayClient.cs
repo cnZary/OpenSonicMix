@@ -12,6 +12,11 @@ namespace SonicCube.Panel.Ipc;
 public sealed class TrayClient : IDisposable
 {
     private PipeConnection? _conn;
+    private bool _disposed;
+    private int _disconnectRaised;
+    private readonly string _pipeName;
+    public TrayClient() : this(TrayPipeName) { }
+    internal TrayClient(string pipeName) => _pipeName = pipeName;
     private int _requestSeq;
     private readonly Dictionary<string, TaskCompletionSource<IpcMessage>> _pending = new();
     private readonly object _pendingSync = new();
@@ -33,7 +38,8 @@ public sealed class TrayClient : IDisposable
     /// <summary>连接 Tray(若未运行则可选启动它)。</summary>
     public async Task<bool> ConnectAsync(int timeoutMs = 1500, CancellationToken ct = default)
     {
-        var pipe = new NamedPipeClientStream(".", TrayPipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+        if (_disposed) return false;
+        var pipe = new NamedPipeClientStream(".", _pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
         try
         {
             await pipe.ConnectAsync(timeoutMs, ct).ConfigureAwait(false);
@@ -49,10 +55,15 @@ public sealed class TrayClient : IDisposable
             return false;
         }
 
-        _conn = new PipeConnection(pipe);
-        _conn.MessageReceived += OnMessage;
-        _conn.Disconnected += OnDisconnected;
-        _conn.StartReadLoop();
+        if (_disposed) { pipe.Dispose(); return false; }
+        var conn = new PipeConnection(pipe);
+        _conn = conn;
+        Interlocked.Exchange(ref _disconnectRaised, 0);
+        State = null;
+        StateVersion = 0;
+        conn.MessageReceived += msg => { if (ReferenceEquals(_conn, conn)) OnMessage(msg); };
+        conn.Disconnected += () => { if (ReferenceEquals(_conn, conn)) OnDisconnected(); };
+        conn.StartReadLoop();
         return true;
     }
 
@@ -64,6 +75,7 @@ public sealed class TrayClient : IDisposable
     /// </summary>
     public async Task<bool> EnsureConnectedAsync(string? trayExePath, CancellationToken ct = default)
     {
+        if (_disposed) return false;
         if (IsConnected) return true;
         await _connectGate.WaitAsync(ct).ConfigureAwait(false);
         try
@@ -99,13 +111,7 @@ public sealed class TrayClient : IDisposable
     public async Task<DeviceStateDto?> SubscribeAndSyncAsync(CancellationToken ct = default)
     {
         await SendRequestAsync(new IpcMessage { Type = IpcMessageType.Subscribe }, ct);
-        var resp = await SendRequestAsync(new IpcMessage { Type = IpcMessageType.GetState }, ct);
-        if (resp?.State != null)
-        {
-            State = resp.State;
-            StateVersion = resp.Version ?? 0;
-            StateUpdated?.Invoke(State);
-        }
+        await SendRequestAsync(new IpcMessage { Type = IpcMessageType.GetState }, ct);
         return State;
     }
 
@@ -140,12 +146,7 @@ public sealed class TrayClient : IDisposable
     public async Task<DeviceStateDto?> GetStateDirectAsync(CancellationToken ct = default)
     {
         var resp = await SendRequestAsync(new IpcMessage { Type = IpcMessageType.GetState }, ct);
-        if (resp?.State != null)
-        {
-            State = resp.State;
-            StateVersion = resp.Version ?? StateVersion;
-        }
-        return resp?.State;
+        return resp?.State is not null ? State : null;
     }
 
     /// <summary>单独订阅(重连后重新建立电平/状态广播)。</summary>
@@ -165,22 +166,24 @@ public sealed class TrayClient : IDisposable
 
     private async Task<IpcMessage?> SendRequestAsync(IpcMessage msg, CancellationToken ct)
     {
-        if (!IsConnected) return null;
+        var conn = _conn;
+        if (conn?.IsConnected != true) return Failure("disconnected");
         msg.RequestId = $"r{Interlocked.Increment(ref _requestSeq)}";
+        msg.DeadlineUnixMs = DateTimeOffset.UtcNow.AddSeconds(20).ToUnixTimeMilliseconds();
         var tcs = new TaskCompletionSource<IpcMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
         lock (_pendingSync) _pending[msg.RequestId] = tcs;
         try
         {
-            await _conn!.SendAsync(msg, ct).ConfigureAwait(false);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeout.CancelAfter(TimeSpan.FromSeconds(20));
-            await using (timeout.Token.Register(() => tcs.TrySetCanceled()).ConfigureAwait(false))
-                return await tcs.Task.ConfigureAwait(false);
+            await conn.SendAsync(msg, timeout.Token).ConfigureAwait(false);
+            return await tcs.Task.WaitAsync(timeout.Token).ConfigureAwait(false);
         }
-        catch
+        catch (OperationCanceledException)
         {
-            return null;
+            return Failure("timeout");
         }
+        catch { return Failure("disconnected"); }
         finally
         {
             lock (_pendingSync) _pending.Remove(msg.RequestId);
@@ -189,6 +192,14 @@ public sealed class TrayClient : IDisposable
 
     private void OnMessage(IpcMessage msg)
     {
+        // Apply snapshots on the ordered read loop, before waking request continuations.
+        bool currentVersion = !msg.Version.HasValue || msg.Version.Value >= StateVersion;
+        if (msg.State != null && currentVersion)
+        {
+            State = msg.State;
+            StateVersion = msg.Version ?? StateVersion;
+            StateUpdated?.Invoke(msg.State);
+        }
         // 响应配对
         if (msg.RequestId != null)
         {
@@ -205,30 +216,33 @@ public sealed class TrayClient : IDisposable
         switch (msg.Type)
         {
             case IpcMessageType.StateChanged:
-                if (msg.State != null)
-                {
-                    State = msg.State;
-                    if (msg.Version.HasValue) StateVersion = msg.Version.Value;
-                    StateUpdated?.Invoke(msg.State);
-                }
                 if (msg.Settings != null) SettingsUpdated?.Invoke(msg.Settings);
                 break;
             case IpcMessageType.MeterUpdate:
                 if (msg.Meters != null) MetersUpdated?.Invoke(msg.Meters);
                 break;
             case IpcMessageType.DeviceStatusChanged:
-                ConnectionChanged?.Invoke(msg.DeviceStatus == "connected");
+                if (currentVersion) ConnectionChanged?.Invoke(msg.DeviceStatus == "connected");
                 break;
         }
     }
 
     private void OnDisconnected()
     {
+        if (Interlocked.Exchange(ref _disconnectRaised, 1) != 0) return;
+        TaskCompletionSource<IpcMessage>[] pending;
+        lock (_pendingSync) { pending = _pending.Values.ToArray(); _pending.Clear(); }
+        foreach (var waiter in pending) waiter.TrySetResult(Failure("disconnected"));
         TrayDisconnected?.Invoke();
     }
 
+    private static IpcMessage Failure(string code) => new()
+        { Type = IpcMessageType.CommandResult, Success = false, ErrorCode = code };
+
     public void Dispose()
     {
+        _disposed = true;
         _conn?.Dispose();
+        OnDisconnected();
     }
 }

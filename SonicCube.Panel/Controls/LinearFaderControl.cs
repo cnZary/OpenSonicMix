@@ -16,7 +16,8 @@ public sealed class LinearFaderControl : FrameworkElement
         Focusable = true;
         Cursor = Cursors.Hand;
         AutomationProperties.SetName(this, "Level");
-        IsEnabledChanged += (_, _) => InvalidateVisual();
+        IsEnabledChanged += (_, _) => { if (!IsEnabled) CancelDrag(); InvalidateVisual(); };
+        Unloaded += (_, _) => CancelDrag();
         GotKeyboardFocus += (_, _) => InvalidateVisual();
         LostKeyboardFocus += (_, _) => InvalidateVisual();
     }
@@ -42,6 +43,7 @@ public sealed class LinearFaderControl : FrameworkElement
     public event Action<double>? ValueChanging;
 
     private bool _dragging;
+    private double _synchronizedValue;
     private DateTime _suppressEchoUntil;
 
     private static void OnValueChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -61,12 +63,37 @@ public sealed class LinearFaderControl : FrameworkElement
 
     public void SetValueSilently(double v)
     {
+        _synchronizedValue = Math.Clamp(v, Minimum, Maximum);
         if (_dragging || (!StateSynchronization.IsLocal(this) && DateTime.UtcNow < _suppressEchoUntil)) return;
         SetCurrentValue(ValueProperty, Math.Clamp(v, Minimum, Maximum));
     }
 
     private void SetValueInternal(double v) => SetCurrentValue(ValueProperty, Math.Clamp(v, Minimum, Maximum));
     private void SuppressEchoBriefly() => _suppressEchoUntil = DateTime.UtcNow.AddMilliseconds(600);
+
+    public void FailPendingWrite(double expected)
+    {
+        if (_dragging || (float)Value != (float)expected) return;
+        _suppressEchoUntil = DateTime.MinValue;
+        SetValueInternal(_synchronizedValue);
+        ValueChanging?.Invoke(Value);
+    }
+
+    private void CancelDrag()
+    {
+        _dragging = false;
+        _suppressEchoUntil = DateTime.MinValue;
+        if (IsMouseCaptured) ReleaseMouseCapture();
+        SetValueInternal(_synchronizedValue);
+        ValueChanging?.Invoke(Value);
+        InvalidateVisual();
+    }
+
+    protected override void OnLostMouseCapture(MouseEventArgs e)
+    {
+        base.OnLostMouseCapture(e);
+        if (_dragging) CancelDrag();
+    }
 
     private double TrackTop => 7;
     private double TrackHeight => Math.Max(10, ActualHeight - 14);

@@ -107,7 +107,21 @@ public partial class ReverbView : UserControl
                 _knobs[i].SetValueSilently(p.GetFxPara(FxCatalog.ModuleRvb, alg.Params[i].AlgId));
     }
 
-    public void SetMask(bool masked) => Mask.Visibility = masked ? Visibility.Visible : Visibility.Collapsed;
+    public void SetMask(bool masked)
+    {
+        Mask.Visibility = masked ? Visibility.Visible : Visibility.Collapsed;
+        AlgSelect.IsEnabled = KnobHost.IsEnabled = !masked;
+        if (masked && (AlgSelect.IsKeyboardFocusWithin || KnobHost.IsKeyboardFocusWithin))
+            System.Windows.Input.Keyboard.ClearFocus();
+    }
+
+    public void FailFxWrite(int module, int param, float expected)
+    {
+        if (module != FxCatalog.ModuleRvb || CurrentAlg is not { } alg) return;
+        for (int i = 0; i < alg.Params.Length && i < _knobs.Count; i++)
+            if (alg.Params[i].AlgId == param)
+                _knobs[i].FailPendingWrite(expected);
+    }
 
     private void ApplyLocalization()
     {

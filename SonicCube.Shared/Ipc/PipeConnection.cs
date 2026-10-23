@@ -66,10 +66,11 @@ public static class IpcFraming
 public sealed class PipeConnection : IDisposable
 {
     private readonly PipeStream _stream;
-    private readonly System.Threading.Channels.Channel<(IpcMessage Msg, TaskCompletionSource? Tcs)> _writeQueue =
-        System.Threading.Channels.Channel.CreateUnbounded<(IpcMessage, TaskCompletionSource?)>();
+    private readonly System.Threading.Channels.Channel<(IpcMessage Msg, TaskCompletionSource? Tcs, CancellationToken Token)> _writeQueue =
+        System.Threading.Channels.Channel.CreateUnbounded<(IpcMessage, TaskCompletionSource?, CancellationToken)>();
     private readonly byte[] _buf = new byte[IpcFraming.MaxMessageBytes + 1];
     private int _len;
+    private int _stopped;
     private CancellationTokenSource? _readCts;
     private CancellationTokenSource? _writeCts;
 
@@ -77,7 +78,7 @@ public sealed class PipeConnection : IDisposable
     public event Action? Disconnected;
 
     public PipeStream Stream => _stream;
-    public bool IsConnected => _stream.IsConnected;
+    public bool IsConnected => Volatile.Read(ref _stopped) == 0 && _stream.IsConnected;
 
     public PipeConnection(PipeStream stream) => _stream = stream;
 
@@ -85,17 +86,17 @@ public sealed class PipeConnection : IDisposable
     public Task SendAsync(IpcMessage msg, CancellationToken ct = default)
     {
         var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!_writeQueue.Writer.TryWrite((msg, tcs)))
+        if (ct.IsCancellationRequested) return Task.FromCanceled(ct);
+        if (!_writeQueue.Writer.TryWrite((msg, tcs, ct)))
         {
             tcs.TrySetException(new InvalidOperationException("写泵已停止"));
             return tcs.Task;
         }
-        if (ct.CanBeCanceled) ct.Register(() => tcs.TrySetCanceled(ct));
-        return tcs.Task;
+        return ct.CanBeCanceled ? tcs.Task.WaitAsync(ct) : tcs.Task;
     }
 
     /// <summary>尽力入队,不等待完成(用于高频广播,调用方不关心结果)。</summary>
-    public void Post(IpcMessage msg) => _writeQueue.Writer.TryWrite((msg, null));
+    public void Post(IpcMessage msg) => _writeQueue.Writer.TryWrite((msg, null, default));
 
     public void StartReadLoop()
     {
@@ -109,8 +110,9 @@ public sealed class PipeConnection : IDisposable
     {
         try
         {
-            await foreach (var (msg, tcs) in _writeQueue.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+            await foreach (var (msg, tcs, token) in _writeQueue.Reader.ReadAllAsync(ct).ConfigureAwait(false))
             {
+                if (token.IsCancellationRequested) { tcs?.TrySetCanceled(token); continue; }
                 try
                 {
                     await IpcFraming.WriteAsync(_stream, msg, ct).ConfigureAwait(false);
@@ -119,11 +121,17 @@ public sealed class PipeConnection : IDisposable
                 catch (Exception ex)
                 {
                     tcs?.TrySetException(ex);
-                    if (ex is IOException or OperationCanceledException) break; // 连接断开,停泵
+                    break;
                 }
             }
         }
         catch (OperationCanceledException) { }
+        finally
+        {
+            Dispose();
+            while (_writeQueue.Reader.TryRead(out var pending))
+                pending.Tcs?.TrySetException(new IOException("Pipe disconnected"));
+        }
     }
 
     private async Task ReadLoopAsync(CancellationToken ct)
@@ -140,7 +148,7 @@ public sealed class PipeConnection : IDisposable
                     if (_len >= _buf.Length) { _len = 0; break; } // 溢出,丢弃
                     if (!IpcFraming.TryReadLine(_buf, ref _len, out var msg, out var err))
                     {
-                        if (err != null) Disconnected?.Invoke();
+                        if (err != null) return;
                         break;
                     }
                     if (msg != null) MessageReceived?.Invoke(msg);
@@ -152,15 +160,17 @@ public sealed class PipeConnection : IDisposable
         catch (Exception) { }
         finally
         {
-            Disconnected?.Invoke();
+            Dispose();
         }
     }
 
     public void Dispose()
     {
+        if (Interlocked.Exchange(ref _stopped, 1) != 0) return;
         _readCts?.Cancel();
         _writeCts?.Cancel();
         _writeQueue.Writer.TryComplete();
         try { _stream.Dispose(); } catch { }
+        Disconnected?.Invoke();
     }
 }

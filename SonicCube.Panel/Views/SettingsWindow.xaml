@@ -14,7 +14,7 @@
       <RowDefinition Height="Auto"/>
     </Grid.RowDefinitions>
 
-    <StackPanel Grid.Row="0" VerticalAlignment="Top">
+    <StackPanel x:Name="SettingsFields" Grid.Row="0" VerticalAlignment="Top">
       <GroupBox x:Name="GGeneral" Header="General" Style="{StaticResource CompactGroup}">
         <StackPanel>
           <Grid>
@@ -65,7 +65,12 @@
       </GroupBox>
     </StackPanel>
     <Border Grid.Row="1" BorderBrush="{StaticResource BrushDivider}" BorderThickness="0,1,0,0" Margin="0,12,0,0" Padding="0,12,0,0">
-      <Button x:Name="CloseBtn" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Right" Width="96" IsCancel="True" Content="OK"/>
+      <Grid>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+        <TextBlock x:Name="SaveStatus" VerticalAlignment="Center" TextWrapping="Wrap" Foreground="{StaticResource BrushTextSecondary}" Margin="0,0,8,0"/>
+        <Button x:Name="RetryBtn" Grid.Column="1" Style="{StaticResource SubtleButton}" Visibility="Collapsed" Margin="0,0,8,0"/>
+        <Button x:Name="CloseBtn" Grid.Column="2" Style="{StaticResource PrimaryButton}" Width="96" IsCancel="True" Content="OK"/>
+      </Grid>
     </Border>
   </Grid>
 </Window>

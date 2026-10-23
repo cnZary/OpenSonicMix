@@ -22,7 +22,8 @@ public sealed class VolumeFaderControl : FrameworkElement
         Focusable = true;
         Cursor = Cursors.Hand;
         AutomationProperties.SetName(this, "Volume fader");
-        IsEnabledChanged += (_, _) => InvalidateVisual();
+        IsEnabledChanged += (_, _) => { if (!IsEnabled) CancelDrag(); InvalidateVisual(); };
+        Unloaded += (_, _) => CancelDrag();
         GotKeyboardFocus += (_, _) => InvalidateVisual();
         LostKeyboardFocus += (_, _) => InvalidateVisual();
     }
@@ -35,7 +36,7 @@ public sealed class VolumeFaderControl : FrameworkElement
 
     /// <summary>节流后提交协议 dB。</summary>
     public event Action<double>? ValueCommitted;
-    /// <summary>拖动中即时值(用于底部数值标签)。</summary>
+    /// <summary>当前显示值变化(拖动、键盘、滚轮及远端同步共用,用于数值标签)。</summary>
     public event Action<double>? ValueChanging;
 
     public const double MinDb = -51;
@@ -43,7 +44,7 @@ public sealed class VolumeFaderControl : FrameworkElement
 
     private bool _dragging;
     private double _pendingDb = double.NaN;
-    private double _lastSentDb = double.NaN;
+    private double _authoritativeDb = MinDb;
     private System.Windows.Threading.DispatcherTimer? _sendTimer;
 
     private static void OnDbChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -52,25 +53,54 @@ public sealed class VolumeFaderControl : FrameworkElement
         double v = Math.Clamp((double)e.NewValue, MinDb, MaxDb);
         if (!Equals(e.NewValue, v)) { f.SetCurrentValue(DbProperty, v); return; }
         f.InvalidateVisual();
+        f.ValueChanging?.Invoke(v);
     }
 
     public void SetDbSilently(double db)
     {
-        // 拖动中不回显。提交后若回显值仍明显偏离最后提交值,说明是旧快照,忽略。
-        if (_dragging) return;
+        _authoritativeDb = Math.Clamp(db, MinDb, MaxDb);
         if (StateSynchronization.IsLocal(this)) _awaitingConfirmDb = double.NaN;
         else if (!double.IsNaN(_awaitingConfirmDb))
         {
             if (Math.Abs(db - _awaitingConfirmDb) < 0.05) _awaitingConfirmDb = double.NaN; // 回包确认,恢复
             else return; // 旧快照,忽略
         }
-        SetCurrentValue(DbProperty, Math.Clamp(db, MinDb, MaxDb));
+        if (!_dragging && double.IsNaN(_pendingDb)) SetDbInternal(_authoritativeDb);
     }
 
     private void SetDbInternal(double db) => SetCurrentValue(DbProperty, Math.Clamp(db, MinDb, MaxDb));
-    private DateTime _suppressEchoUntil = DateTime.MinValue;
     private double _awaitingConfirmDb = double.NaN;
-    private void SuppressEchoBriefly() => _suppressEchoUntil = DateTime.UtcNow.AddMilliseconds(600);
+
+    /// <summary>调用方按请求代次过滤过期结果;此处再核对目标值,避免清除较新的拖动提交。</summary>
+    public void CompletePendingWrite(double expectedValue, bool success)
+    {
+        if (double.IsNaN(_awaitingConfirmDb) || Math.Abs(expectedValue - _awaitingConfirmDb) >= 0.05) return;
+        _awaitingConfirmDb = double.NaN;
+        if (success) _authoritativeDb = Math.Clamp(expectedValue, MinDb, MaxDb);
+        if (!_dragging && double.IsNaN(_pendingDb)) SetDbInternal(_authoritativeDb);
+    }
+
+    public void ResetSynchronization()
+    {
+        _awaitingConfirmDb = double.NaN;
+        CancelDrag();
+    }
+
+    private void CancelDrag()
+    {
+        _dragging = false;
+        _sendTimer?.Stop();
+        _pendingDb = double.NaN;
+        if (IsMouseCaptured) ReleaseMouseCapture();
+        SetDbInternal(double.IsNaN(_awaitingConfirmDb) ? _authoritativeDb : _awaitingConfirmDb);
+        InvalidateVisual();
+    }
+
+    protected override void OnLostMouseCapture(MouseEventArgs e)
+    {
+        base.OnLostMouseCapture(e);
+        if (_dragging) CancelDrag();
+    }
 
     private double TrackTop => 7;
     private double TrackHeight => Math.Max(10, ActualHeight - 14);
@@ -98,7 +128,6 @@ public sealed class VolumeFaderControl : FrameworkElement
             SetDbInternal(0);
             QueueSend(0);
             FlushPending();
-            SuppressEchoBriefly();
             e.Handled = true;
             return;
         }
@@ -122,7 +151,6 @@ public sealed class VolumeFaderControl : FrameworkElement
         _dragging = false;
         ReleaseMouseCapture();
         FlushPending();
-        SuppressEchoBriefly();
         InvalidateVisual();
         e.Handled = true;
     }
@@ -134,7 +162,6 @@ public sealed class VolumeFaderControl : FrameworkElement
         SetDbInternal(nd);
         QueueSend(nd);
         FlushPending();
-        SuppressEchoBriefly();
         e.Handled = true;
     }
 
@@ -169,7 +196,6 @@ public sealed class VolumeFaderControl : FrameworkElement
             SetDbInternal(nd);
             QueueSend(nd);
             FlushPending();
-            SuppressEchoBriefly();
             e.Handled = true;
         }
     }
@@ -179,7 +205,6 @@ public sealed class VolumeFaderControl : FrameworkElement
         double nd = Math.Clamp(YToDb(y), MinDb, MaxDb);
         if (Math.Abs(nd - Db) < 0.05) return;
         SetDbInternal(nd);
-        ValueChanging?.Invoke(nd);
         QueueSend(nd);
     }
 
@@ -196,11 +221,12 @@ public sealed class VolumeFaderControl : FrameworkElement
     {
         _sendTimer?.Stop();
         if (double.IsNaN(_pendingDb)) return;
-        if (Math.Abs(_pendingDb - _lastSentDb) < 0.01) { _pendingDb = double.NaN; return; }
-        _lastSentDb = _pendingDb;
+        double value = _pendingDb;
         _pendingDb = double.NaN;
-        _awaitingConfirmDb = _lastSentDb; // 等待该值回包确认后再恢复回显
-        ValueCommitted?.Invoke(_lastSentDb);
+        double comparison = double.IsNaN(_awaitingConfirmDb) ? _authoritativeDb : _awaitingConfirmDb;
+        if (Math.Abs(value - comparison) < 0.01) return;
+        _awaitingConfirmDb = value;
+        ValueCommitted?.Invoke(value);
     }
 
     // ── 画刷/文字资源缓存 ──

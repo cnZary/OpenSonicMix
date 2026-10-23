@@ -1,6 +1,7 @@
 using SonicCube.Protocol.Commands;
 using SonicCube.Protocol.Models;
 using SonicCube.Shared.Midi;
+using SonicCube.Shared.Ipc;
 
 namespace SonicCube.Tray.Device;
 
@@ -19,24 +20,17 @@ public enum ConnectionState
 
 /// <summary>
 /// 统一异步命令协调器(见需求第七节)。
-/// 单工作线程串行处理所有 MIDI 操作:连接/断开/Toggle/写参数/自动动作。
+/// 单异步工作泵串行处理所有 MIDI 操作:连接/断开/Toggle/写参数/自动动作。
 /// 保证:不并发建连、不并发握手、命令与关端口不冲突、异常不崩溃、发送线程唯一。
 /// </summary>
 public sealed class DeviceCoordinator
 {
     private readonly object _sync = new();
-    private readonly Queue<Func<CancellationToken, Task>> _queue = new();
-    private readonly SemaphoreSlim _signal = new(0);
-    private readonly Thread _worker;
-    private readonly CancellationTokenSource _shutdown = new();
-    private volatile bool _running = true;
+    private readonly SerialCommandQueue<(uint Address, int Module, int Parameter), CommandResult> _commands;
 
     private DeviceSession? _session;
     private ConnectionState _state = ConnectionState.Disconnected;
     private long _connectEpoch; // 每次成功建连递增,用于区分「可信离线→在线」转换与过期操作
-
-    // 同一开关的进行中操作去重
-    private readonly HashSet<QuickSwitch> _inFlightSwitches = new();
 
     public event Action<ConnectionState>? StateChanged;
     public event Action? Connected;                 // 建连+握手+状态同步完成
@@ -64,6 +58,7 @@ public sealed class DeviceCoordinator
 
     // 会话存活期间的最新状态 + 断开前最后一次快照
     private readonly SwitchStateSnapshot _lastSnapshot = new();
+    private DeviceStateDto? _lastStateSnapshot;
 
     /// <summary>获取六个快速开关的当前已知状态(已连接=实时;低占用空闲=断开前最后状态)。</summary>
     public SwitchStateSnapshot GetSwitchStates()
@@ -73,14 +68,15 @@ public sealed class DeviceCoordinator
             var s = _session;
             if (s != null && IsConnected)
             {
+                var state = s.GetStateSnapshot(connected: true);
                 return new SwitchStateSnapshot
                 {
-                    Phantom48V = s.Global.Phantom48V,
-                    Efx = s.Global.Efx,
-                    Monitor = s.Global.Monitor,
-                    OnAir = s.Global.OnAir,
-                    MasterMute = s.Global.MasterMute,
-                    MonoSw = s.Preset.MonoSw,
+                    Phantom48V = state.Phantom48V,
+                    Efx = state.Efx,
+                    Monitor = state.Monitor,
+                    OnAir = state.OnAir,
+                    MasterMute = state.MasterMute,
+                    MonoSw = state.MonoSw,
                     HasData = true,
                 };
             }
@@ -98,18 +94,18 @@ public sealed class DeviceCoordinator
     }
 
     /// <summary>断开前把会话状态快照到 _lastSnapshot,供低占用模式菜单回显。</summary>
-    private void CaptureLastSnapshot()
+    private void CaptureLastSnapshot(DeviceSession s)
     {
-        var s = _session;
-        if (s == null) return;
         lock (_sync)
         {
-            _lastSnapshot.Phantom48V = s.Global.Phantom48V;
-            _lastSnapshot.Efx = s.Global.Efx;
-            _lastSnapshot.Monitor = s.Global.Monitor;
-            _lastSnapshot.OnAir = s.Global.OnAir;
-            _lastSnapshot.MasterMute = s.Global.MasterMute;
-            _lastSnapshot.MonoSw = s.Preset.MonoSw;
+            var state = s.GetStateSnapshot(connected: false);
+            _lastStateSnapshot = state;
+            _lastSnapshot.Phantom48V = state.Phantom48V;
+            _lastSnapshot.Efx = state.Efx;
+            _lastSnapshot.Monitor = state.Monitor;
+            _lastSnapshot.OnAir = state.OnAir;
+            _lastSnapshot.MasterMute = state.MasterMute;
+            _lastSnapshot.MonoSw = state.MonoSw;
             _lastSnapshot.HasData = true;
         }
     }
@@ -118,16 +114,16 @@ public sealed class DeviceCoordinator
     public volatile bool PanelOpen;
 
     /// <summary>是否有待执行或进行中的命令(阻止空闲断开)。</summary>
-    public bool HasPendingWork
-    {
-        get { lock (_sync) return _queue.Count > 0 || _busy; }
-    }
-    private bool _busy;
+    public bool HasPendingWork => _commands.HasPendingWork;
 
     public DeviceCoordinator()
     {
-        _worker = new Thread(() => WorkLoopAsync().GetAwaiter().GetResult()) { IsBackground = true, Name = "SonicCube.DeviceCoordinator" };
-        _worker.Start();
+        _commands = new((code, ex) =>
+        {
+            if (ex is not null) Logging.Logger.Error("Cmd", $"命令异常: {ex.Message}");
+            return CommandResult.Fail(code, ex?.Message);
+        });
+        _commands.CommandCompleted += () => CommandCompleted?.Invoke();
     }
 
     private void SetState(ConnectionState s)
@@ -136,77 +132,16 @@ public sealed class DeviceCoordinator
         StateChanged?.Invoke(s);
     }
 
-    /// <summary>把操作入队,立即返回(不阻塞调用方/消息循环)。</summary>
-    public void Enqueue(Func<CancellationToken, Task> op)
-    {
-        lock (_sync) _queue.Enqueue(op);
-        _signal.Release();
-    }
-    /// <summary>入队并等待完成(带超时),返回结果。供 IPC/需要回执的路径。</summary>
-    public Task<CommandResult> EnqueueAndWaitAsync(Func<CancellationToken, Task<CommandResult>> op, TimeSpan? timeout = null)
-    {
-        var tcs = new TaskCompletionSource<CommandResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-        Enqueue(async ct =>
-        {
-            try
-            {
-                using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, _shutdown.Token);
-                if (timeout.HasValue) linked.CancelAfter(timeout.Value);
-                var r = await op(linked.Token).ConfigureAwait(false);
-                tcs.TrySetResult(r);
-            }
-            catch (OperationCanceledException)
-            {
-                tcs.TrySetResult(CommandResult.Fail("timeout", "命令执行超时或被取消"));
-            }
-            catch (Exception ex)
-            {
-                Logging.Logger.Error("Cmd", $"命令异常: {ex.Message}");
-                tcs.TrySetResult(CommandResult.Fail("error", ex.Message));
-            }
-        });
-        return tcs.Task;
-    }
+    public void Enqueue(Func<CancellationToken, Task> op) =>
+        _ = EnqueueAndWaitAsync(async ct => { await op(ct).ConfigureAwait(false); return CommandResult.Ok(); });
 
-    private async Task WorkLoopAsync()
-    {
-        try
-        {
-            while (_running)
-            {
-                Func<CancellationToken, Task>? op = null;
-                lock (_sync)
-                {
-                    if (_queue.Count > 0) { op = _queue.Dequeue(); _busy = true; }
-                }
-                if (op == null)
-                {
-                    try { await _signal.WaitAsync(200).ConfigureAwait(false); }
-                    catch (Exception ex) { Logging.Logger.Error("Cmd", $"WaitAsync 异常: {ex.Message}"); }
-                    continue;
-                }
-                try
-                {
-                    await op(_shutdown.Token).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    Logging.Logger.Error("Cmd", $"工作循环异常: {ex.GetType().Name}: {ex.Message}");
-                }
-                finally
-                {
-                    lock (_sync) _busy = false;
-                    try { CommandCompleted?.Invoke(); } catch { }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Logging.Logger.Error("Cmd", $"工作线程终止: {ex.GetType().Name}: {ex.Message}");
-        }
-        Logging.Logger.Error("Cmd", "工作线程已退出(_running=false)");
-    }
+    /// <summary>同步入队；超时从入队开始，包含排队与执行时间。离散命令隔断连续值合并。</summary>
+    public Task<CommandResult> EnqueueAndWaitAsync(Func<CancellationToken, Task<CommandResult>> op, TimeSpan? timeout = null, CancellationToken cancellationToken = default) =>
+        _commands.Enqueue(op, timeout ?? TimeSpan.FromSeconds(15), cancellationToken);
 
+    private Task<CommandResult> EnqueueLatestAsync((uint Address, int Module, int Parameter) key,
+        Func<CancellationToken, Task<CommandResult>> op, TimeSpan timeout, CancellationToken cancellationToken) =>
+        _commands.EnqueueLatest(key, op, timeout, cancellationToken);
     /// <summary>每条命令完成后触发(用于重置空闲计时)。</summary>
     public event Action? CommandCompleted;
 
@@ -236,7 +171,7 @@ public sealed class DeviceCoordinator
             session.MetersReceived += OnMeters;
             session.MessageReceived += OnDeviceMessage;
             session.RawFrame += OnRawFrame;
-            _session = session;
+            lock (_sync) _session = session;
             Logging.Logger.Info("Device", "端口已打开,开始握手...");
 
             await session.HandshakeAsync(ct).ConfigureAwait(false);
@@ -313,11 +248,15 @@ public sealed class DeviceCoordinator
 
     private void DisposeSession()
     {
-        var s = _session;
-        _session = null;
+        DeviceSession? s;
+        lock (_sync)
+        {
+            s = _session;
+            if (s != null && _state == ConnectionState.Connected) CaptureLastSnapshot(s);
+            _session = null;
+        }
         if (s != null)
         {
-            CaptureLastSnapshot();
             try { s.MetersReceived -= OnMeters; s.MessageReceived -= OnDeviceMessage; s.RawFrame -= OnRawFrame; }
             catch { }
             try { s.Dispose(); } catch { }
@@ -326,6 +265,33 @@ public sealed class DeviceCoordinator
 
     /// <summary>当前会话(仅工作线程使用)。</summary>
     public DeviceSession? Session => _session;
+
+    /// <summary>Detach one coherent snapshot from the current connection and receive state.</summary>
+    public DeviceStateDto GetStateSnapshot()
+    {
+        lock (_sync)
+        {
+            if (_session != null && _state == ConnectionState.Connected)
+                return _session.GetStateSnapshot(connected: true);
+            // A disconnected or partially synchronized session must not replace the last
+            // confirmed values with defaults. Detach the retained state for every publication.
+            return _lastStateSnapshot is { } state ? CopyDisconnectedState(state) : new DeviceStateDto();
+        }
+    }
+
+    private static DeviceStateDto CopyDisconnectedState(DeviceStateDto state) => new()
+    {
+        Connected = false,
+        Phantom48V = state.Phantom48V, Efx = state.Efx, ReverbOn = state.ReverbOn,
+        Monitor = state.Monitor, OnAir = state.OnAir, MasterMute = state.MasterMute,
+        InverseSw = (int[])state.InverseSw.Clone(), HpfSw = (int[])state.HpfSw.Clone(),
+        LowCut = (int[])state.LowCut.Clone(), LoopbackSw = (int[])state.LoopbackSw.Clone(),
+        DspRecSw = state.DspRecSw, FxModuleEn = state.FxModuleEn,
+        FxAlg = (int[])state.FxAlg.Clone(), FxParaVal = (float[])state.FxParaVal.Clone(),
+        MuteSw = (int[])state.MuteSw.Clone(), SoloSw = (int[])state.SoloSw.Clone(),
+        VolPot = (float[])state.VolPot.Clone(), Phase = (float[])state.Phase.Clone(),
+        Send = (float[])state.Send.Clone(), MonoSw = state.MonoSw,
+    };
 
     // ── 事件转发 ────────────────────────────────────────────
 
@@ -359,40 +325,18 @@ public sealed class DeviceCoordinator
 
     /// <summary>
     /// 执行快速开关 Toggle(见 7.2):读当前有效状态 → 计算目标 → 发送 → 等回包 → 验证 → 更新缓存。
-    /// 同一开关进行中时抑制重复输入;不同开关排队。MONO 走 PHASE 联动组合。
+    /// 每次点击均按入队顺序执行。MONO 走 PHASE 联动组合。
     /// </summary>
-    public Task<CommandResult> ToggleSwitchAsync(QuickSwitch sw, ActionSource source)
+    public Task<CommandResult> ToggleSwitchAsync(QuickSwitch sw, ActionSource source, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
     {
-        lock (_sync)
-        {
-            if (_inFlightSwitches.Contains(sw))
-            {
-                Logging.Logger.Debug("Cmd", $"开关 {sw} 正在执行,抑制重复输入");
-                // 返回一个已完成的「被合并」结果,避免意外多次反转。
-                return Task.FromResult(CommandResult.Fail("busy", "该开关正在执行"));
-            }
-            _inFlightSwitches.Add(sw);
-        }
-
         return EnqueueAndWaitAsync(async ct =>
         {
-            try
-            {
-                Logging.Logger.Info("Cmd", $"Toggle {sw} 开始 (source={source}, connected={IsConnected})");
-                // 确保连接(复用当前连接与缓存,不重复全量拉取)。
-                var c = await EnsureConnectedInternalAsync(source, ct).ConfigureAwait(false);
-                if (!c.Success) { Logging.Logger.Warn("Cmd", $"Toggle {sw} 连接失败: {c.ErrorCode}"); return c; }
-                var r = await DoToggleAsync(sw, ct).ConfigureAwait(false);
-                Logging.Logger.Info("Cmd", $"Toggle {sw} (source={source}) → {(r.Success ? "成功" : r.ErrorCode)}");
-                return r;
-            }
-            finally
-            {
-                lock (_sync) _inFlightSwitches.Remove(sw);
-            }
-        }, TimeSpan.FromSeconds(20));
+            Logging.Logger.Info("Cmd", $"Toggle {sw} 开始 (source={source}, connected={IsConnected})");
+            var c = await EnsureConnectedInternalAsync(source, ct).ConfigureAwait(false);
+            if (!c.Success) return c;
+            return await DoToggleAsync(sw, ct).ConfigureAwait(false);
+        }, timeout ?? TimeSpan.FromSeconds(20), cancellationToken);
     }
-
     private Task<CommandResult> EnsureConnectedInternalAsync(ActionSource source, CancellationToken ct) =>
         IsConnected && _session != null
             ? Task.FromResult(CommandResult.Ok())
@@ -551,7 +495,7 @@ public sealed class DeviceCoordinator
         };
     }
 
-    public Task<CommandResult> SetParameterAsync(uint fullAddress, int value, ActionSource source) =>
+    public Task<CommandResult> SetParameterAsync(uint fullAddress, int value, ActionSource source, TimeSpan? timeout = null, CancellationToken cancellationToken = default) =>
         EnqueueAndWaitAsync(async ct =>
         {
             var c = await EnsureConnectedInternalAsync(source, ct).ConfigureAwait(false);
@@ -559,7 +503,7 @@ public sealed class DeviceCoordinator
             if (CommandAddress.TypeOf(fullAddress) == CommandAddress.FxModuleEnable)
                 return await WriteFxModuleEnableAsync(CommandAddress.LocationOf(fullAddress), value, ct).ConfigureAwait(false);
             return await WriteIntVerifiedAsync(fullAddress, value, ct).ConfigureAwait(false);
-        }, TimeSpan.FromSeconds(15));
+        }, timeout ?? TimeSpan.FromSeconds(15), cancellationToken);
 
     /// <summary>
     /// FXMODULEEN 专用写入(真机实测):设备按 location 置位/清位,但确认回包载荷恒为 0、不含新位图。
@@ -575,7 +519,7 @@ public sealed class DeviceCoordinator
         try
         {
             await s.SetIntAsync(addr, value, ct).ConfigureAwait(false);
-            s.Preset.SetModuleEnabled(module, value != 0);
+            s.SetModuleEnabled(module, value != 0);
             DeviceMessage?.Invoke(addr, []); // 让 IPC 端用合并后的位图重发快照
             return CommandResult.Ok();
         }
@@ -593,16 +537,16 @@ public sealed class DeviceCoordinator
         }
     }
 
-    public Task<CommandResult> SetParameterFloatAsync(uint fullAddress, float value, ActionSource source) =>
-        EnqueueAndWaitAsync(async ct =>
+    public Task<CommandResult> SetParameterFloatAsync(uint fullAddress, float value, ActionSource source, TimeSpan? timeout = null, CancellationToken cancellationToken = default) =>
+        EnqueueLatestAsync((fullAddress, -1, -1), async ct =>
         {
             var c = await EnsureConnectedInternalAsync(source, ct).ConfigureAwait(false);
             if (!c.Success) return c;
             return await WriteFloatVerifiedAsync(fullAddress, value, ct).ConfigureAwait(false);
-        }, TimeSpan.FromSeconds(15));
+        }, timeout ?? TimeSpan.FromSeconds(15), cancellationToken);
 
-    public Task<CommandResult> SetFxParameterAsync(int module, int paramIndex, float value, ActionSource source) =>
-        EnqueueAndWaitAsync(async ct =>
+    public Task<CommandResult> SetFxParameterAsync(int module, int paramIndex, float value, ActionSource source, TimeSpan? timeout = null, CancellationToken cancellationToken = default) =>
+        EnqueueLatestAsync((0, module, paramIndex), async ct =>
         {
             var c = await EnsureConnectedInternalAsync(source, ct).ConfigureAwait(false);
             if (!c.Success) return c;
@@ -623,7 +567,7 @@ public sealed class DeviceCoordinator
             }
             float final = s.Preset.GetFxPara(module, paramIndex);
             return CommandResult.Fail("verify", $"FX 参数读回值 {final:0.00} 与目标 {value:0.00} 不符");
-        }, TimeSpan.FromSeconds(20));
+        }, timeout ?? TimeSpan.FromSeconds(20), cancellationToken);
 
     /// <summary>
     /// 单模块重置:先关该模块开关,再把当前算法全部参数写回 FxCatalog 默认值。
@@ -631,7 +575,7 @@ public sealed class DeviceCoordinator
     /// SendFxParameterNoConfirmAsync + 整包读回核对;参数间隔 ~20ms。
     /// 设备端算法不在目录(未知 fxId)时,退化为写该模块所有算法的全部参数默认值。
     /// </summary>
-    public Task<CommandResult> ResetModuleAsync(int module, ActionSource source) =>
+    public Task<CommandResult> ResetModuleAsync(int module, ActionSource source, TimeSpan? timeout = null, CancellationToken cancellationToken = default) =>
         EnqueueAndWaitAsync(async ct =>
         {
             var c = await EnsureConnectedInternalAsync(source, ct).ConfigureAwait(false);
@@ -669,14 +613,13 @@ public sealed class DeviceCoordinator
                     return CommandResult.Fail("verify", $"参数读回 {cur:0.00} 与默认 {last.Default:0.00} 不符");
             }
             return CommandResult.Ok();
-        }, TimeSpan.FromSeconds(20));
+        }, timeout ?? TimeSpan.FromSeconds(20), cancellationToken);
 
     public void Shutdown()
     {
-        _running = false;
-        _shutdown.Cancel();
-        try { _signal.Release(); } catch { }
-        DisposeSession();
-        try { _worker.Join(2000); } catch { }
+        _commands.Stop();
+        // Never close MIDI ports concurrently with a write still unwinding cancellation.
+        if (_commands.Completion.Wait(TimeSpan.FromSeconds(2))) DisposeSession();
+        else _ = _commands.Completion.ContinueWith(_ => DisposeSession(), TaskScheduler.Default);
     }
 }

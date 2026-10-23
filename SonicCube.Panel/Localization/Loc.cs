@@ -10,6 +10,7 @@ namespace SonicCube.Panel.Localization;
 public static class Loc
 {
     private static readonly ResourceManager Rm = new("SonicCube.Panel.Localization.Strings", typeof(Loc).Assembly);
+    internal static readonly CultureInfo SystemUiCulture = CultureInfo.CurrentUICulture;
 
     /// <summary>当前 UI 文化。</summary>
     public static CultureInfo Culture { get; private set; } = CultureInfo.CurrentUICulture;
@@ -22,11 +23,11 @@ public static class Loc
     {
         CultureInfo target;
         if (string.Equals(configured, "auto", StringComparison.OrdinalIgnoreCase) || string.IsNullOrEmpty(configured))
-            target = CultureInfo.CurrentUICulture;
+            target = SystemUiCulture;
         else
         {
             try { target = CultureInfo.GetCultureInfo(configured); }
-            catch { target = CultureInfo.CurrentUICulture; }
+            catch { target = SystemUiCulture; }
         }
         SetCulture(target);
     }

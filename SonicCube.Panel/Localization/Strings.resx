@@ -93,4 +93,11 @@
   <data name="Err_busy" xml:space="preserve"><value>The switch is busy.</value></data>
   <data name="Err_error" xml:space="preserve"><value>An error occurred.</value></data>
   <data name="Err_unknown" xml:space="preserve"><value>Unknown command.</value></data>
+  <data name="SettingsSaving" xml:space="preserve"><value>Saving…</value></data>
+  <data name="SettingsSaved" xml:space="preserve"><value>Saved</value></data>
+  <data name="SettingsSaveFailed" xml:space="preserve"><value>Not saved; previous settings restored. {0}</value></data>
+  <data name="Retry" xml:space="preserve"><value>Retry</value></data>
+  <data name="Err_disconnected" xml:space="preserve"><value>Connection lost. Please reconnect and retry.</value></data>
+  <data name="Err_not_ready" xml:space="preserve"><value>Wait for device synchronization to finish.</value></data>
+  <data name="Err_settings_save" xml:space="preserve"><value>Could not save settings to disk.</value></data>
 </root>

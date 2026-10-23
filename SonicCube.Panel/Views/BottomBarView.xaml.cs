@@ -38,6 +38,9 @@ public partial class BottomBarView : UserControl
         _suppress = false;
     }
 
+    public void SetDeviceEnabled(bool enabled) =>
+        BtnEfx.IsEnabled = BtnMonitor.IsEnabled = BtnOnAir.IsEnabled = enabled;
+
     public void SetStatus(string text)
     {
         StatusText.Text = text;

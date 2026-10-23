@@ -81,4 +81,11 @@
   <data name="Err_busy" xml:space="preserve"><value>该开关正忙。</value></data>
   <data name="Err_error" xml:space="preserve"><value>发生错误。</value></data>
   <data name="Err_unknown" xml:space="preserve"><value>未知命令。</value></data>
+  <data name="SettingsSaving" xml:space="preserve"><value>正在保存…</value></data>
+  <data name="SettingsSaved" xml:space="preserve"><value>已保存</value></data>
+  <data name="SettingsSaveFailed" xml:space="preserve"><value>保存失败，已恢复原设置。{0}</value></data>
+  <data name="Retry" xml:space="preserve"><value>重试</value></data>
+  <data name="Err_disconnected" xml:space="preserve"><value>连接已断开，请重新连接后重试。</value></data>
+  <data name="Err_not_ready" xml:space="preserve"><value>请等待设备状态同步完成。</value></data>
+  <data name="Err_settings_save" xml:space="preserve"><value>无法将设置写入磁盘。</value></data>
 </root>

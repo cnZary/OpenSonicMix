@@ -26,7 +26,8 @@ public sealed class KnobControl : FrameworkElement
         UseLayoutRounding = true;
         Cursor = Cursors.Hand;
         AutomationProperties.SetName(this, "Knob");
-        IsEnabledChanged += (_, _) => InvalidateVisual();
+        IsEnabledChanged += (_, _) => { if (!IsEnabled) CancelDrag(); InvalidateVisual(); };
+        Unloaded += (_, _) => CancelDrag();
         GotKeyboardFocus += (_, _) => InvalidateVisual();
         LostKeyboardFocus += (_, _) => InvalidateVisual();
         _editor.Visibility = Visibility.Collapsed;
@@ -73,6 +74,7 @@ public sealed class KnobControl : FrameworkElement
     private bool _dragging;
     private double _dragStartY;
     private double _dragStartValue;
+    private double _synchronizedValue;
 
     private static void OnValueChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
@@ -91,6 +93,7 @@ public sealed class KnobControl : FrameworkElement
 
     public void SetValueSilently(double v)
     {
+        _synchronizedValue = Math.Clamp(v, Minimum, Maximum);
         // 拖动中或刚提交后短暂窗口内不回显,避免快照覆盖用户输入/造成回跳
         if (_dragging || (!StateSynchronization.IsLocal(this) && DateTime.UtcNow < _suppressEchoUntil)) return;
         SetCurrentValue(ValueProperty, Math.Clamp(v, Minimum, Maximum));
@@ -101,6 +104,30 @@ public sealed class KnobControl : FrameworkElement
 
     private DateTime _suppressEchoUntil = DateTime.MinValue;
     private void SuppressEchoBriefly() => _suppressEchoUntil = DateTime.UtcNow.AddMilliseconds(600);
+
+    /// <summary>Restore the latest snapshot after this value failed, without replacing a newer edit.</summary>
+    public void FailPendingWrite(double expected)
+    {
+        if (_dragging || _editor.Visibility == Visibility.Visible || (float)Value != (float)expected) return;
+        _suppressEchoUntil = DateTime.MinValue;
+        SetValueInternal(_synchronizedValue);
+    }
+
+    private void CancelDrag()
+    {
+        _editor.Visibility = Visibility.Collapsed;
+        _dragging = false;
+        _suppressEchoUntil = DateTime.MinValue;
+        if (IsMouseCaptured) ReleaseMouseCapture();
+        SetValueInternal(_synchronizedValue);
+        InvalidateVisual();
+    }
+
+    protected override void OnLostMouseCapture(MouseEventArgs e)
+    {
+        base.OnLostMouseCapture(e);
+        if (_dragging) CancelDrag();
+    }
 
     public void Configure(double min, double max, double step, double def, string name)
     {
@@ -113,6 +140,7 @@ public sealed class KnobControl : FrameworkElement
     private void ResetToDefault()
     {
         SetValueInternal(DefaultValue);
+        SuppressEchoBriefly();
         ValueCommitted?.Invoke(Value);
     }
 
@@ -198,7 +226,7 @@ public sealed class KnobControl : FrameworkElement
         if (e.Key is Key.Up or Key.Down or Key.Left or Key.Right or Key.Home or Key.End)
         {
             nv = Math.Clamp(nv, Minimum, Maximum);
-            if (Math.Abs(nv - Value) >= 1e-9) { SetValueInternal(nv); ValueCommitted?.Invoke(nv); }
+            if (Math.Abs(nv - Value) >= 1e-9) { SetValueInternal(nv); SuppressEchoBriefly(); ValueCommitted?.Invoke(nv); }
             e.Handled = true;
         }
     }
@@ -259,6 +287,8 @@ public sealed class KnobControl : FrameworkElement
         {
             v = Snap(Math.Clamp(v, Minimum, Maximum));
             SetValueInternal(v);
+            SuppressEchoBriefly();
+            _editor.Visibility = Visibility.Collapsed;
             ValueCommitted?.Invoke(v);
         }
         _editor.Visibility = Visibility.Collapsed;

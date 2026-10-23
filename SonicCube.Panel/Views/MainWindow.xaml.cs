@@ -22,7 +22,11 @@ public partial class MainWindow : Window
     private DeviceStateDto _state = new();
     private PresetState _preset = new();
     private GlobalState _global = new();
-    private long _stateVersion;
+    private readonly CancellationTokenSource _lifetime = new();
+    private Task? _refreshTask;
+    private readonly Dictionary<uint, long> _floatRequests = new();
+    private readonly Dictionary<(int Module, int Parameter), long> _fxRequests = new();
+    private long _requestGeneration;
     private bool _synced;
     private bool _closing;
 
@@ -133,7 +137,7 @@ public partial class MainWindow : Window
     {
         _client!.StateUpdated += st => RunOnUi(() => ApplySnapshot(st));
         _client.MetersUpdated += m => ApplyMeters(m);
-        _client.ConnectionChanged += conn => RunOnUi(() => UpdateStatus(conn));
+        _client.ConnectionChanged += conn => RunOnUi(() => OnDeviceConnectionChanged(conn));
         _client.SettingsUpdated += s => RunOnUi(() => ApplySettings(s));
         _client.TrayDisconnected += () => RunOnUi(() =>
         {
@@ -152,83 +156,58 @@ public partial class MainWindow : Window
 
     public async void BeginSync()
     {
-        _t0 = System.Diagnostics.Stopwatch.StartNew();
         if (_simulate) return;
-        UpdateStatus(false);
         BottomBar.SetStatus(Loc.Get("TrayConnecting"));
-
-        // Tray 未运行时尽早拉起并等它就绪:App.OnStartup 已并发发起同一连接(信号量共享),
-        // 这里等连接建立后再首轮同步,避免空跑一轮后落入粗粒度重试循环。
-        string trayPath = System.IO.Path.Combine(AppContext.BaseDirectory, "SonicCube.Tray.exe");
-        bool conn = await _client!.EnsureConnectedAsync(trayPath);
-
-        var st = conn ? await _client.SubscribeAndSyncAsync() : null;
-        var settings = conn ? await _client.GetSettingsAsync() : null;
-        if (settings != null)
+        try
         {
-            _settings = settings;
-            RunOnUi(() => ApplySettings(settings));
-        }
-        if (st != null) RunOnUi(() => ApplySnapshot(st));
-        _synced = st != null && st.Connected;
-        RunOnUi(() =>
-        {
-            UpdateUiEnabled();
-            if (st != null) UpdateStatus(st.Connected);
-            if (_synced && _t0 != null)
+            string trayPath = System.IO.Path.Combine(AppContext.BaseDirectory, "SonicCube.Tray.exe");
+            if (!await _client!.EnsureConnectedAsync(trayPath, _lifetime.Token))
             {
-                var el = _t0.ElapsedMilliseconds;
-                _t0 = null;
-                BottomBar.SetStatus(Loc.Format("SyncCompleted", el));
-                var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
-                timer.Tick += (_, _) => { timer.Stop(); UpdateStatus(_state.Connected); };
-                timer.Start();
+                if (!_closing) UpdateStatus(false);
+                StartRefresh();
+                return;
             }
-        });
-
-        // Panel 拉起 Tray 或低占用模式唤醒设备的竞态:Panel 可能在设备握手完成前连接,
-        // get_state 拿到 Connected=false 的全零默认快照(即使之前连接过使 StateVersion>0)。
-        // 兜底:快照缺失、未连接或版本为 0 时,持续重试拉取直到拿到已连接设备的真实快照。
-        if (st == null || !st.Connected || _client!.StateVersion == 0)
-        {
-            _ = RefresWhenReadyAsync();
+            await _client.SubscribeAndSyncAsync(_lifetime.Token);
+            if (_closing) return;
+            var settings = await _client.GetSettingsAsync(_lifetime.Token);
+            if (_closing) return;
+            if (settings != null) ApplySettings(settings);
+            if (!_synced) StartRefresh();
         }
+        catch (OperationCanceledException) { }
     }
 
-    private async Task RefresWhenReadyAsync()
+    private void StartRefresh()
     {
-        // 设备握手可能要几秒;多轮尝试,每轮先等 Tray 连接可用再(重新)订阅并拉快照。
-        for (int i = 0; i < 60; i++)
-        {
-            if (_client == null) return;
-            if (!_client.IsConnected)
-            {
-                string trayPath = System.IO.Path.Combine(AppContext.BaseDirectory, "SonicCube.Tray.exe");
-                await _client.EnsureConnectedAsync(trayPath);
-                // 重连后必须重新订阅(冷启动时首次 subscribe 可能已超时,导致电平广播被抑制)。
-                await _client.SubscribeAsync();
-            }
-            else
-            {
-                // 已连接则立即拉一次快照(首轮无等待),设备尚未握手完成(Connected=false)则下轮再试。
-                var st = await _client.GetStateDirectAsync();
-                if (st is { Connected: true } && _client.StateVersion > 0)
-                {
-                    RunOnUi(() =>
-                    {
-                        ApplySnapshot(st);
-                        _synced = true;
-                        UpdateUiEnabled();
-                        UpdateStatus(st.Connected);
-                    });
-                    return;
-                }
-            }
-            await Task.Delay(200);
-        }
+        if (_closing || _client == null || _refreshTask is { IsCompleted: false }) return;
+        _refreshTask = RefreshWhenReadyAsync();
     }
 
-    private System.Diagnostics.Stopwatch? _t0;
+    private async Task RefreshWhenReadyAsync()
+    {
+        try
+        {
+            for (int i = 0; i < 60 && !_closing && !_synced; i++)
+            {
+                if (!_client!.IsConnected)
+                {
+                    string trayPath = System.IO.Path.Combine(AppContext.BaseDirectory, "SonicCube.Tray.exe");
+                    if (await _client.EnsureConnectedAsync(trayPath, _lifetime.Token))
+                        await _client.SubscribeAsync(_lifetime.Token);
+                }
+                await _client!.GetStateDirectAsync(_lifetime.Token);
+                if (_synced || _closing) return;
+                await Task.Delay(200, _lifetime.Token);
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private void OnDeviceConnectionChanged(bool connected)
+    {
+        UpdateStatus(connected);
+        if (connected && !_synced) StartRefresh();
+    }
 
     private void ApplySettings(SettingsDto s)
     {
@@ -240,7 +219,7 @@ public partial class MainWindow : Window
     private void ApplySnapshot(DeviceStateDto dto)
     {
         _state = dto;
-        _stateVersion = _client?.StateVersion ?? _stateVersion;
+        if (_closing) return;
         var p = new PresetState();
         Array.Copy(dto.InverseSw, p.InverseSw, 2);
         Array.Copy(dto.HpfSw, p.HpfSw, 2);
@@ -261,11 +240,8 @@ public partial class MainWindow : Window
             Phantom48V = dto.Phantom48V, Efx = dto.Efx, ReverbOn = dto.ReverbOn,
             Monitor = dto.Monitor, OnAir = dto.OnAir, MasterMute = dto.MasterMute,
         };
-        if (dto.Connected)
-        {
-            _synced = true;
-            UpdateUiEnabled();
-        }
+        _synced = dto.Connected;
+        UpdateUiEnabled();
         ApplySnapshotToUi();
         UpdateStatus(dto.Connected);
     }
@@ -296,15 +272,24 @@ public partial class MainWindow : Window
     private void UpdateStatus(bool connected)
     {
         _state.Connected = connected;
-        BottomBar.SetStatus(connected ? Loc.Get("DeviceConnected") : Loc.Get("DeviceDisconnected"));
+        if (!connected)
+        {
+            _synced = false;
+            _floatRequests.Clear();
+            _fxRequests.Clear();
+            ResetVolumeSynchronization();
+        }
+        UpdateUiEnabled();
+        BottomBar.SetStatus(Loc.Get(_simulate ? "Simulated" : !connected ? "DeviceDisconnected" : _synced ? "DeviceConnected" : "Syncing"));
     }
 
     private void UpdateUiEnabled()
     {
-        bool en = _synced || _simulate;
+        bool en = !_closing && (_simulate || (_synced && _state.Connected));
         Mic1.IsEnabled = en; Line2.IsEnabled = en;
         Usb.IsEnabled = en; Otg.IsEnabled = en;
         Master.IsEnabled = en; Fx.IsEnabled = en; Rvb.IsEnabled = en;
+        BottomBar.SetDeviceEnabled(en);
     }
 
     // ── 发送(经 Tray)────────────────────────────────────────
@@ -328,7 +313,7 @@ public partial class MainWindow : Window
             ApplySimulatedState();
             return;
         }
-        _ = SendSafe(() => _client!.SetFloatAsync(address, value));
+        _ = SendFloatWithFeedbackAsync(address, value);
     }
 
     private void SendFxParam(int module, int algId, float value)
@@ -339,7 +324,7 @@ public partial class MainWindow : Window
             ApplySimulatedState();
             return;
         }
-        _ = SendSafe(() => _client!.SetFxParamAsync(module, algId, value));
+        _ = SendFxWithFeedbackAsync(module, algId, value);
     }
 
     private void Toggle(string sw)
@@ -353,16 +338,76 @@ public partial class MainWindow : Window
         _ = SendSafe(() => _client!.ToggleAsync(sw));
     }
 
-    private async Task SendSafe(Func<Task<IpcMessage?>> op)
+    private async Task<IpcMessage?> SendSafe(Func<Task<IpcMessage?>> op, Func<bool>? isCurrent = null)
     {
-        if (_simulate || _client == null) return;
-        try
+        if (_simulate || _client == null || _closing) return null;
+        IpcMessage? resp;
+        if (!_synced || !_state.Connected)
+            resp = new IpcMessage { Success = false, ErrorCode = "not_ready" };
+        else
         {
-            var resp = await op();
-            if (resp != null && resp.Success == false)
-                BottomBar.SetStatus($"{Loc.Get("Error")}: {Loc.Get("Err_" + resp.ErrorCode)}");
+            try { resp = await op(); }
+            catch { resp = null; }
         }
-        catch { }
+        if (_closing || resp?.ErrorCode == "superseded" || isCurrent?.Invoke() == false) return resp;
+        if (resp?.Success != true)
+        {
+            string key = "Err_" + (resp?.ErrorCode ?? "disconnected");
+            string error = Loc.Get(key);
+            BottomBar.SetStatus($"{Loc.Get("Error")}: {(error == key ? Loc.Get("Err_error") : error)}");
+            ApplySnapshotToUi();
+        }
+        return resp;
+    }
+
+    private async Task SendFloatWithFeedbackAsync(uint address, float value)
+    {
+        long generation = ++_requestGeneration;
+        _floatRequests[address] = generation;
+        var response = await SendSafe(() => _client!.SetFloatAsync(address, value, _lifetime.Token),
+            () => _floatRequests.TryGetValue(address, out var current) && current == generation);
+        if (_closing || !_floatRequests.TryGetValue(address, out var latest) || latest != generation) return;
+        _floatRequests.Remove(address);
+        if (response?.ErrorCode == "superseded") return;
+        if (CommandAddress.TypeOf(address) == CommandAddress.VolumePot)
+        {
+            int channel = CommandAddress.LocationOf(address);
+            if (channel < 4)
+                CompleteVolumeWrite(channel, value, response?.Success == true);
+        }
+        else if (response?.Success != true)
+        {
+            Mic1.FailFloatWrite(address, value);
+            Line2.FailFloatWrite(address, value);
+        }
+    }
+
+    private async Task SendFxWithFeedbackAsync(int module, int parameter, float value)
+    {
+        var key = (module, parameter);
+        long generation = ++_requestGeneration;
+        _fxRequests[key] = generation;
+        var response = await SendSafe(() => _client!.SetFxParamAsync(module, parameter, value, _lifetime.Token),
+            () => _fxRequests.TryGetValue(key, out var current) && current == generation);
+        if (_closing || !_fxRequests.TryGetValue(key, out var latest) || latest != generation) return;
+        _fxRequests.Remove(key);
+        if (response?.Success == true || response?.ErrorCode == "superseded") return;
+        Fx.FailFxWrite(module, parameter, value);
+        Rvb.FailFxWrite(module, parameter, value);
+    }
+
+    private void ResetVolumeSynchronization()
+    {
+        foreach (var view in new FrameworkElement[] { Mic1, Line2, Usb, Otg })
+            ((Controls.VolumeFaderControl)view.FindName("Fader")).ResetSynchronization();
+    }
+
+    private void CompleteVolumeWrite(int channel, float value, bool success)
+    {
+        var view = new FrameworkElement[] { Mic1, Line2, Usb, Otg }[channel];
+        var fader = (Controls.VolumeFaderControl)view.FindName("Fader");
+        fader.CompletePendingWrite(value, success);
+        fader.SetDbSilently(_preset.VolPot[channel]);
     }
 
     // ── 重置(当前选中模块 / 完全重置整机,均需确认)──────────────
@@ -430,11 +475,14 @@ public partial class MainWindow : Window
     private void ApplyLocalization()
     {
         Title = Loc.Get("AppTitle");
+        if (BottomBar != null) UpdateStatus(_state.Connected);
     }
 
     protected override void OnClosed(EventArgs e)
     {
         _closing = true; // 自己释放连接也会触发 TrayDisconnected,防止重入
+        _lifetime.Cancel();
+        Loc.LanguageChanged -= ApplyLocalization;
         base.OnClosed(e);
         _simTimer?.Stop();
         if (_simTimer != null) _simTimer.Tick -= OnSimulatorTick;

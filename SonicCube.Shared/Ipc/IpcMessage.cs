@@ -10,6 +10,7 @@ public sealed class IpcMessage
 {
     [JsonPropertyName("type")] public string Type { get; set; } = "";
     [JsonPropertyName("requestId")] public string? RequestId { get; set; }
+    [JsonPropertyName("deadlineUnixMs")] public long? DeadlineUnixMs { get; set; }
 
     // set_parameter / toggle_switch
     [JsonPropertyName("address")] public uint? Address { get; set; }

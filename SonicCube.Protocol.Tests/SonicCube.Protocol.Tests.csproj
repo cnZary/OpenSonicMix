@@ -18,6 +18,11 @@
 
   <ItemGroup>
     <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+    <Compile Include="..\SonicCube.Tray\Settings\AppSettings.cs" Link="Tray\AppSettings.cs" />
+    <Compile Include="..\SonicCube.Tray\Settings\SettingsStore.cs" Link="Tray\SettingsStore.cs" />
+    <Compile Include="..\SonicCube.Tray\Logging\Logger.cs" Link="Tray\Logger.cs" />
+    <Compile Include="..\SonicCube.Tray\Device\ActionSource.cs" Link="Tray\ActionSource.cs" />
+    <Compile Include="..\SonicCube.Tray\Device\DeviceCoordinator.cs" Link="Tray\DeviceCoordinator.cs" />
   </ItemGroup>
 
 </Project>

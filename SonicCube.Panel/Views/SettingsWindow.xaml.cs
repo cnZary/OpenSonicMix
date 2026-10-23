@@ -16,12 +16,16 @@ public partial class SettingsWindow : Window
     private SettingsDto _settings;
     private bool _loading;
     private bool _phantomConsentGrantedThisSession;
+    private bool _saving;
+    private SettingsDto? _retrySettings;
+    internal Func<SettingsDto, Task<IpcMessage?>>? SaveSettings { get; set; }
 
     public event Action<SettingsDto>? SettingsSaved;
 
     public SettingsWindow(TrayClient? client, SettingsDto current)
     {
         _client = client;
+        SaveSettings = client is null ? null : dto => client.UpdateSettingsAsync(dto);
         _settings = current;
         InitializeComponent();
         OpenLog.IsEnabled = _client is not null;
@@ -53,6 +57,10 @@ public partial class SettingsWindow : Window
         AlwaysOnTop.Unchecked += async (_, _) => await SaveAsync();
         OpenLog.Click += (_, _) => OpenLogDir();
         CloseBtn.Click += (_, _) => Close();
+        RetryBtn.Click += async (_, _) =>
+        {
+            if (_retrySettings is { } retry) await PersistAsync(retry);
+        };
     }
 
     private void LoadFrom(SettingsDto s)
@@ -84,8 +92,6 @@ public partial class SettingsWindow : Window
     {
         if (_loading) return;
         UpdateReapplyEnabled(IsFast);
-        if (_client is not null)
-            await _client.SetWorkModeAsync(IsFast ? "fastConnection" : "lowResource");
         await SaveAsync();
     }
 
@@ -148,13 +154,15 @@ public partial class SettingsWindow : Window
     {
         if (_loading) return;
         string lang = Lang.SelectedIndex switch { 1 => "en-US", 2 => "zh-CN", _ => "auto" };
-        Loc.Apply(lang);
+        _loading = true;
+        try { Loc.Apply(lang); }
+        finally { _loading = false; }
         await SaveAsync();
     }
 
     private async Task SaveAsync()
     {
-        if (_loading) return;
+        if (_loading || _saving) return;
         var dto = new SettingsDto
         {
             Language = Lang.SelectedIndex switch { 1 => "en-US", 2 => "zh-CN", _ => "auto" },
@@ -168,18 +176,66 @@ public partial class SettingsWindow : Window
                 ? false
                 : (_phantomConsentGrantedThisSession || (_settings.PhantomPowerConsent ?? false)),
         };
-        if (_client is null)
+        await PersistAsync(dto);
+    }
+
+    private async Task PersistAsync(SettingsDto dto)
+    {
+        if (_saving) return;
+        if (SaveSettings is null)
         {
             _settings = dto;
             SettingsSaved?.Invoke(dto);
             return;
         }
-        var resp = await _client.UpdateSettingsAsync(dto);
-        if (resp?.Success == true)
+        _saving = true;
+        SettingsFields.IsEnabled = CloseBtn.IsEnabled = false;
+        RetryBtn.Visibility = Visibility.Collapsed;
+        SaveStatus.Text = Loc.Get("SettingsSaving");
+        try
         {
-            _settings = dto;
-            SettingsSaved?.Invoke(dto);
+            IpcMessage? resp;
+            try { resp = await SaveSettings(dto); }
+            catch { resp = null; }
+            if (resp?.Success == true)
+            {
+                _settings = dto;
+                _retrySettings = null;
+                LoadFrom(dto);
+                ApplySavedLanguage(dto);
+                SettingsSaved?.Invoke(dto);
+                SaveStatus.Text = Loc.Get("SettingsSaved");
+            }
+            else
+            {
+                _retrySettings = dto;
+                LoadFrom(_settings);
+                ApplySavedLanguage(_settings);
+                string key = "Err_" + (resp?.ErrorCode ?? "disconnected");
+                string detail = Loc.Get(key);
+                if (detail == key) detail = Loc.Get("Err_error");
+                SaveStatus.Text = Loc.Format("SettingsSaveFailed", detail);
+                RetryBtn.Visibility = Visibility.Visible;
+            }
         }
+        finally
+        {
+            _saving = false;
+            SettingsFields.IsEnabled = CloseBtn.IsEnabled = true;
+        }
+    }
+
+    private void ApplySavedLanguage(SettingsDto dto)
+    {
+        _loading = true;
+        try { Loc.Apply(dto.Language ?? "auto"); }
+        finally { _loading = false; }
+    }
+
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        if (_saving) e.Cancel = true;
+        base.OnClosing(e);
     }
 
     private void OpenLogDir()
@@ -215,6 +271,7 @@ public partial class SettingsWindow : Window
         ReapplyHint.Text = Loc.Get("OnlyFastMode");
         AlwaysOnTop.Content = Loc.Get("AlwaysOnTop");
         OpenLog.Content = Loc.Get("Open");
+        RetryBtn.Content = Loc.Get("Retry");
         OpenLog.ToolTip = _client is null ? Loc.Get("Simulated") : null;
         if (Lang.Items.Count > 0) Lang.Items[0] = Loc.Get("LanguageAuto");
     }

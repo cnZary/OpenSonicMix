@@ -20,7 +20,8 @@ public sealed class PanSliderControl : FrameworkElement
         Focusable = true;
         Cursor = Cursors.Hand;
         AutomationProperties.SetName(this, "Pan");
-        IsEnabledChanged += (_, _) => InvalidateVisual();
+        IsEnabledChanged += (_, _) => { if (!IsEnabled) CancelDrag(); InvalidateVisual(); };
+        Unloaded += (_, _) => CancelDrag();
         GotKeyboardFocus += (_, _) => InvalidateVisual();
         LostKeyboardFocus += (_, _) => InvalidateVisual();
     }
@@ -35,6 +36,7 @@ public sealed class PanSliderControl : FrameworkElement
     public event Action<double>? ValueChanging;
 
     private bool _dragging;
+    private double _synchronizedValue;
 
     private static void OnValueChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
@@ -46,6 +48,7 @@ public sealed class PanSliderControl : FrameworkElement
 
     public void SetValueSilently(double v)
     {
+        _synchronizedValue = Math.Clamp(v, -50, 50);
         // 拖动中或刚提交后短暂窗口内不回显,避免快照回跳
         if (_dragging || (!StateSynchronization.IsLocal(this) && DateTime.UtcNow < _suppressEchoUntil)) return;
         SetCurrentValue(ValueProperty, Math.Clamp(v, -50, 50));
@@ -54,6 +57,28 @@ public sealed class PanSliderControl : FrameworkElement
     private void SetValueInternal(double v) => SetCurrentValue(ValueProperty, Math.Clamp(v, -50, 50));
     private DateTime _suppressEchoUntil = DateTime.MinValue;
     private void SuppressEchoBriefly() => _suppressEchoUntil = DateTime.UtcNow.AddMilliseconds(600);
+
+    public void FailPendingWrite(double expected)
+    {
+        if (_dragging || (float)Value != (float)expected) return;
+        _suppressEchoUntil = DateTime.MinValue;
+        SetValueInternal(_synchronizedValue);
+    }
+
+    private void CancelDrag()
+    {
+        _dragging = false;
+        _suppressEchoUntil = DateTime.MinValue;
+        if (IsMouseCaptured) ReleaseMouseCapture();
+        SetValueInternal(_synchronizedValue);
+        InvalidateVisual();
+    }
+
+    protected override void OnLostMouseCapture(MouseEventArgs e)
+    {
+        base.OnLostMouseCapture(e);
+        if (_dragging) CancelDrag();
+    }
 
     private double XToValue(double x)
     {
@@ -107,8 +132,8 @@ public sealed class PanSliderControl : FrameworkElement
         if (e.ClickCount == 2)
         {
             SetValueInternal(0);
-            ValueCommitted?.Invoke(0);
             SuppressEchoBriefly();
+            ValueCommitted?.Invoke(0);
             e.Handled = true;
             return;
         }
