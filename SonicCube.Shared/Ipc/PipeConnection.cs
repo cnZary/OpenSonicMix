@@ -66,8 +66,13 @@ public static class IpcFraming
 public sealed class PipeConnection : IDisposable
 {
     private readonly PipeStream _stream;
-    private readonly System.Threading.Channels.Channel<(IpcMessage Msg, TaskCompletionSource? Tcs, CancellationToken Token)> _writeQueue =
-        System.Threading.Channels.Channel.CreateUnbounded<(IpcMessage, TaskCompletionSource?, CancellationToken)>();
+    // A null message is the single pending-meter marker. Reliable messages keep their
+    // FIFO positions; replacing a meter never adds another item behind a blocked pipe.
+    private readonly System.Threading.Channels.Channel<(IpcMessage? Msg, TaskCompletionSource? Tcs, CancellationToken Token)> _writeQueue =
+        System.Threading.Channels.Channel.CreateUnbounded<(IpcMessage?, TaskCompletionSource?, CancellationToken)>();
+    private readonly object _meterSync = new();
+    private IpcMessage? _pendingMeter;
+    private bool _meterQueued;
     private readonly byte[] _buf = new byte[IpcFraming.MaxMessageBytes + 1];
     private int _len;
     private int _stopped;
@@ -95,8 +100,28 @@ public sealed class PipeConnection : IDisposable
         return ct.CanBeCanceled ? tcs.Task.WaitAsync(ct) : tcs.Task;
     }
 
-    /// <summary>尽力入队,不等待完成(用于高频广播,调用方不关心结果)。</summary>
-    public void Post(IpcMessage msg) => _writeQueue.Writer.TryWrite((msg, null, default));
+    /// <summary>尽力入队。电平仅保留最新待发值,其他广播与请求保持 FIFO。</summary>
+    public void Post(IpcMessage msg)
+    {
+        if (msg.Type != IpcMessageType.MeterUpdate)
+        {
+            _writeQueue.Writer.TryWrite((msg, null, default));
+            return;
+        }
+
+        lock (_meterSync)
+        {
+            if (Volatile.Read(ref _stopped) != 0) return;
+            _pendingMeter = msg;
+            if (_meterQueued) return;
+            _meterQueued = true;
+            if (!_writeQueue.Writer.TryWrite((null, null, default)))
+            {
+                _pendingMeter = null;
+                _meterQueued = false;
+            }
+        }
+    }
 
     public void StartReadLoop()
     {
@@ -110,8 +135,19 @@ public sealed class PipeConnection : IDisposable
     {
         try
         {
-            await foreach (var (msg, tcs, token) in _writeQueue.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+            await foreach (var (queuedMessage, tcs, token) in _writeQueue.Reader.ReadAllAsync(ct).ConfigureAwait(false))
             {
+                var msg = queuedMessage;
+                if (msg == null)
+                {
+                    lock (_meterSync)
+                    {
+                        msg = _pendingMeter;
+                        _pendingMeter = null;
+                        _meterQueued = false;
+                    }
+                    if (msg == null) continue;
+                }
                 if (token.IsCancellationRequested) { tcs?.TrySetCanceled(token); continue; }
                 try
                 {
@@ -167,6 +203,11 @@ public sealed class PipeConnection : IDisposable
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _stopped, 1) != 0) return;
+        lock (_meterSync)
+        {
+            _pendingMeter = null;
+            _meterQueued = false;
+        }
         _readCts?.Cancel();
         _writeCts?.Cancel();
         _writeQueue.Writer.TryComplete();

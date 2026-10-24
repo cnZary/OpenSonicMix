@@ -400,7 +400,8 @@ public sealed class IpcServer
         PipeConnection? c;
         lock (_sync) c = _client;
         if (c == null || !c.IsConnected) return;
-        // 同步入队到写泵:零分配、且与请求/响应共用同一队列,保证严格按入队顺序写出。
+        // 可靠广播与请求/响应保持 FIFO。电平在写泵内再次合并最新值,
+        // 管道阻塞时不会把每个 40ms 的旧电平堆积起来。
         c.Post(msg);
     }
 

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Media;
@@ -24,6 +25,7 @@ public sealed class MeterBar : FrameworkElement
     private static int _wakePending;
     private static int _inputVersion;
     private static TimeSpan? _lastRenderingTime;
+    private static long _renderWakeTimestamp;
     private Window? _hostWindow;
     private volatile bool _registered;
     private volatile bool _windowMinimized;
@@ -87,25 +89,29 @@ public sealed class MeterBar : FrameworkElement
         UpdateSubscription();
     }
 
-    /// <summary>目标电平(dB,-100=无信号)。线程安全:仅保留最新。</summary>
+    /// <summary>目标电平(dB,-100=无信号)。条体使用最新值,两帧之间的最大值另存供峰值线使用。</summary>
     private float _targetL = -100f;
     private float _targetR = -100f;
 
     private readonly double[] _display;       // 渲染用平滑值(0..1)
     private readonly double[] _peak;          // 峰值保持(0..1)
     private readonly DateTime[] _peakHoldUntil;
+    private readonly double[] _pendingPeak = new double[2];
+    private readonly DateTime[] _pendingPeakHoldUntil = new DateTime[2];
 
-    // 快攻慢放(dB/秒)
-    private const double AttackDbPerSec = 240;   // 快速上升
+    // 上升按剩余距离平滑追近,约 60ms 完成 95%;小幅变化也经过多帧,避免逐包跳变。
+    private const double AttackTimeConstantSeconds = 0.020;
+    private const double DisplayTolerance = 1e-4; // 0.006dB,300 DIP 条高下小于 0.03 DIP
     private const double ReleaseDbPerSec = 24;   // 条体回落,快于峰值线:停声后条先落、峰值悬空慢降
     private static readonly TimeSpan PeakHold = TimeSpan.FromMilliseconds(900);
     private const double PeakReleaseDbPerSec = 10;   // 峰值线慢速下落,始终不落于条顶之下
 
-    /// <summary>提交最新电平(dB)。任何线程可调用,只保留最新值;若当前渲染已休眠且有新信号则零延迟唤醒。</summary>
-    public void SetLevelDb(float leftDb, float rightDb)
+    /// <summary>提交最新电平(dB)。任何线程可调用;保留帧间短峰值,若渲染已休眠则立即请求唤醒。</summary>
+    public void SetLevelDb(float leftDb, float rightDb) => SetLevelDb(leftDb, rightDb, DateTime.UtcNow);
+
+    internal void SetLevelDb(float leftDb, float rightDb, DateTime now)
     {
         bool needsStep;
-        var now = DateTime.UtcNow;
         lock (_levelSync)
         {
             double previousL = DbToNorm(_targetL);
@@ -114,16 +120,25 @@ public sealed class MeterBar : FrameworkElement
             double tr = DbToNorm(rightDb);
             // 上个目标一直保持到本次输入;从稳定峰值下降时也保留完整保持段,
             // 即使两次输入相隔很久、期间渲染已休眠。
-            if ((tl >= _peak[0] && tl > 1e-4) || (previousL >= _peak[0] && previousL > 1e-4))
-                _peakHoldUntil[0] = now + PeakHold;
-            if ((tr >= _peak[1] && tr > 1e-4) || (previousR >= _peak[1] && previousR > 1e-4))
-                _peakHoldUntil[1] = now + PeakHold;
+            RetainPeak(0, Math.Max(previousL, tl), now);
+            RetainPeak(1, Math.Max(previousR, tr), now);
             _targetL = leftDb;
             _targetR = rightDb;
-            needsStep = NeedsStepCore();
+            needsStep = NeedsStepCore(now);
         }
         Interlocked.Increment(ref _inputVersion);
         if (needsStep && !_subscribed && _registered) RequestWake();
+    }
+
+    private void RetainPeak(int ch, double peak, DateTime now)
+    {
+        // 隐藏/阻塞期间过期的高峰不能遮住更新的低峰,也不能在恢复绘制时重新获得保持时间。
+        if (now > _pendingPeakHoldUntil[ch]) _pendingPeak[ch] = 0;
+        if (peak >= _pendingPeak[ch] && peak > 1e-4)
+        {
+            _pendingPeak[ch] = peak;
+            _pendingPeakHoldUntil[ch] = now + PeakHold;
+        }
     }
 
     private void RequestWake()
@@ -151,6 +166,7 @@ public sealed class MeterBar : FrameworkElement
         {
             if (_subscribed || Active.Count == 0) return;
             _lastRenderingTime = null;
+            _renderWakeTimestamp = Stopwatch.GetTimestamp();
             CompositionTarget.Rendering += OnRendering;
             _subscribed = true;
         }
@@ -182,6 +198,7 @@ public sealed class MeterBar : FrameworkElement
             if (!_subscribed && NeedsStep(DateTime.UtcNow))
             {
                 _lastRenderingTime = null;
+                _renderWakeTimestamp = Stopwatch.GetTimestamp();
                 CompositionTarget.Rendering += OnRendering;
                 _subscribed = true;
             }
@@ -216,8 +233,9 @@ public sealed class MeterBar : FrameworkElement
         _lastRenderingTime = frame.RenderingTime;
         int inputVersion = Volatile.Read(ref _inputVersion);
         var now = DateTime.UtcNow;
-        double dt = previousTime.HasValue ? (frame.RenderingTime - previousTime.Value).TotalSeconds : 0.016;
-        dt = Math.Clamp(dt, 0, 0.1);
+        // 休眠唤醒后的第一帧仅推进实际经过的时间,不假定每块屏幕都是 60Hz。
+        double dt = FrameElapsedSeconds(previousTime, frame.RenderingTime,
+            previousTime.HasValue ? 0 : Stopwatch.GetElapsedTime(_renderWakeTimestamp).TotalSeconds);
 
         lock (Active)
         {
@@ -228,7 +246,7 @@ public sealed class MeterBar : FrameworkElement
                 if (!m.IsVisible || m._windowMinimized || m.ActualHeight <= 0) continue;
                 if (m.Step(now, dt)) anyActive = true;
             }
-            // 稳定电平与静音均休眠;新信号直接唤醒,保留原有逐帧动画速度。
+            // 稳定电平与静音均休眠;新信号直接唤醒,仍由统一渲染驱动逐帧推进。
             if (!anyActive && _subscribed)
             {
                 CompositionTarget.Rendering -= OnRendering;
@@ -240,17 +258,22 @@ public sealed class MeterBar : FrameworkElement
         }
     }
 
+    internal static double FrameElapsedSeconds(TimeSpan? previous, TimeSpan current, double wakeElapsedSeconds) =>
+        Math.Clamp(previous.HasValue ? (current - previous.Value).TotalSeconds : wakeElapsedSeconds, 0, 0.1);
+
     private bool NeedsStep(DateTime now)
     {
-        lock (_levelSync) return NeedsStepCore();
+        lock (_levelSync) return NeedsStepCore(now);
     }
 
-    private bool NeedsStepCore()
+    private bool NeedsStepCore(DateTime now)
     {
         double tl = DbToNorm(_targetL);
         double tr = DbToNorm(_targetR);
         return Math.Abs(tl - _display[0]) > 1e-4 || Math.Abs(tr - _display[1]) > 1e-4
-            || Math.Abs(_peak[0] - tl) > 1e-4 || Math.Abs(_peak[1] - tr) > 1e-4;
+            || Math.Abs(_peak[0] - tl) > 1e-4 || Math.Abs(_peak[1] - tr) > 1e-4
+            || (_pendingPeakHoldUntil[0] >= now && _pendingPeak[0] > _peak[0] + 1e-4)
+            || (_pendingPeakHoldUntil[1] >= now && _pendingPeak[1] > _peak[1] + 1e-4);
     }
 
     /// <summary>推进一步动画;返回是否仍有未收敛的动画需要下一帧继续。</summary>
@@ -258,22 +281,32 @@ public sealed class MeterBar : FrameworkElement
     {
         lock (_levelSync)
         {
-            bool changed = StepChannel(0, DbToNorm(_targetL), now, dt);
-            changed |= StepChannel(1, DbToNorm(_targetR), now, dt);
+            double attackBlend = 1 - Math.Exp(-dt / AttackTimeConstantSeconds);
+            bool changed = StepChannel(0, DbToNorm(_targetL), now, dt, attackBlend);
+            changed |= StepChannel(1, DbToNorm(_targetR), now, dt, attackBlend);
             if (changed) UpdateDynamicVisuals();
-            return changed || NeedsStepCore();
+            return changed || NeedsStepCore(now);
         }
     }
 
-    private bool StepChannel(int ch, double target, DateTime now, double dt)
+    private bool StepChannel(int ch, double target, DateTime now, double dt, double attackBlend)
     {
         bool changed = false;
+        // 接收线程仅记录数据;峰值 Visual 的更新仍在 UI 帧上执行。
+        if (_pendingPeakHoldUntil[ch] >= now && _pendingPeak[ch] >= _peak[ch] && _pendingPeak[ch] > 1e-4)
+        {
+            changed = _pendingPeak[ch] != _peak[ch];
+            _peak[ch] = _pendingPeak[ch];
+            if (_pendingPeakHoldUntil[ch] > _peakHoldUntil[ch])
+                _peakHoldUntil[ch] = _pendingPeakHoldUntil[ch];
+        }
+        _pendingPeak[ch] = 0;
         double cur = _display[ch];
-        double stepUp = AttackDbPerSec * dt / 60.0;
         double stepDown = ReleaseDbPerSec * dt / 60.0;
-        double next = target > cur ? Math.Min(target, cur + stepUp) : Math.Max(target, cur - stepDown);
-        // 很短的帧间隔只应移动很小的距离,不能据此认定已收敛并吸附到目标。
-        // Min/Max 会在剩余距离小于步长时自然精确到达目标;dt=0 则保持原值。
+        double next = target > cur ? cur + (target - cur) * attackBlend : Math.Max(target, cur - stepDown);
+        // 只在剩余距离小于视觉精度时收敛,避免指数尾部持续请求帧。
+        // 不能根据本帧移动量判定收敛,极小 dt 的正常运动也会很小;dt=0 不吸附。
+        if (dt > 0 && target > cur && target - next <= DisplayTolerance) next = target;
         if (next != cur) { _display[ch] = next; changed = true; }
 
         // 峰值保持
